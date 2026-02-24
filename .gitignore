@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 out/
+release/
 
 # Environment
 .env
@@ -19,18 +20,35 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Logs
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Locofy
 .locofy/
 
-# Electron
-release/
+# Large artifacts & Analysis (Sync with root)
+*.json
+!package.json
+!package-lock.json
+!locofy.config.json
+*.xlsx
+!public/**/*.xlsx
+*.pdf
+*.html
+*.txt
+*.js
+!src/**/*
+!electron/**/*
+!public/**/*
+vite.config.js
 
-# Large artifacts & Analysis
-preview_test.html
-template-analysis.txt
-analyze-template.js
+# Backup files
+*.backup_*
+*.corrupted_backup
+*.backup
+*_corrupted_backup.css
