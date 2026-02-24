@@ -1,0 +1,176 @@
+/* Form 137-SHS Official Layout - Print Paper Only */
+/* Global *, body, and table resets removed — app.css handles those.
+   All styles here are scoped to .paper (the print preview container). */
+
+.paper {
+    width: 210mm;
+    min-height: 297mm;
+    background: white;
+    padding: 5mm 8mm;
+    margin-bottom: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    position: relative;
+}
+
+.paper table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+/* Bordered tables (for subjects, eligibility) */
+table.form td,
+table.form th {
+    border: 1px solid #000;
+    padding: 1px 2px;
+    vertical-align: middle;
+    font-size: 6pt;
+    line-height: 1.1;
+    overflow: hidden;
+}
+
+table.form td {
+    white-space: normal;
+    word-wrap: break-word;
+}
+
+table.form th {
+    text-align: center;
+    font-weight: bold;
+    background: #f5f5f5;
+}
+
+/* Section headers */
+.hdr {
+    background: #d9d9d9;
+    text-align: center;
+    font-weight: bold;
+    padding: 1px 2px;
+    border: 1px solid #000;
+    font-size: 6.5pt;
+    margin: 2px 0 1px 0;
+    line-height: 1.2;
+}
+
+.lbl {
+    background: #f0f0f0;
+    font-weight: bold;
+}
+
+.c {
+    text-align: center;
+}
+
+/* Borderless tables (learner info, school info) */
+table.clean-tbl td,
+table.clean-tbl th {
+    border: none;
+    padding: 0px 2px;
+    vertical-align: bottom;
+    font-size: 6pt;
+    line-height: 1.15;
+}
+
+table.clean-tbl .lbl {
+    background: transparent;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+/* Inline label + input style */
+.flex-cell {
+    white-space: nowrap;
+    font-size: 6pt;
+    font-weight: bold;
+}
+
+.flex-inp {
+    border: none;
+    border-bottom: 1px solid #000;
+    width: calc(100% - 60px);
+    outline: none;
+    background: transparent;
+    font-family: Arial, sans-serif;
+    font-size: 6pt;
+    padding: 0 1px;
+    margin-left: 2px;
+    height: 1.2em;
+    display: inline-block;
+    font-weight: normal;
+}
+
+/* General Input Reset — scoped to .paper (print preview only) */
+.paper input[type="text"],
+.paper input[type="number"],
+.paper input[type="date"],
+.paper textarea,
+.paper .inp {
+    border: none;
+    background: transparent;
+    width: 100%;
+    font-family: Arial, sans-serif;
+    font-size: inherit;
+    text-align: inherit;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+    display: block;
+    font-weight: normal;
+}
+
+.paper input[type="checkbox"] {
+    vertical-align: middle;
+    margin-right: 2px;
+    margin-left: 2px;
+    width: auto;
+    display: inline-block;
+}
+
+/* Print styles */
+@media print {
+    * {
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    html,
+    body {
+        padding: 0;
+        margin: 0;
+        background: white;
+        overflow: visible !important;
+        height: auto !important;
+    }
+
+    .paper {
+        box-shadow: none;
+        margin: 0;
+        padding: 5mm 8mm;
+        page-break-after: always;
+        min-height: 297mm;
+        height: auto;
+        overflow: visible !important;
+    }
+
+    @page {
+        size: A4;
+        margin: 0;
+    }
+
+    .no-print {
+        display: none;
+    }
+
+    ::-webkit-scrollbar {
+        display: none;
+    }
+
+    * {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+}

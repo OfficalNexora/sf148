@@ -1,0 +1,13 @@
+{
+  "components": [
+    "./src/components/Login.jsx",
+    "./src/components/Dashboard.jsx",
+    "./src/components/Sidebar.jsx",
+    "./src/components/StudentEditor.jsx",
+    "./src/components/UserManagement.jsx",
+    "./src/components/Modals.jsx"
+  ],
+  "publicPath": "./public/assets",
+  "projectId": "37oBeFtiq8JdT9G9RkHxb4BY09R",
+  "projectName": "Untitled"
+}

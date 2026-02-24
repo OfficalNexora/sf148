@@ -1,0 +1,395 @@
+/* ===== STUDENT EDITOR — Tabbed Form Layout ===== */
+
+.editor-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 0 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.editor-tab {
+    padding: 8px 18px;
+    border: none;
+    background: rgba(255, 255, 255, 0.06);
+    color: #94a3b8;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.editor-tab:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
+}
+
+.editor-tab.active {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+}
+
+/* ── Section Panel ── */
+.editor-section {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    backdrop-filter: blur(8px);
+}
+
+.editor-section h3 {
+    color: #e2e8f0;
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 20px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.editor-section h3 .section-icon {
+    font-size: 16px;
+    opacity: 0.7;
+}
+
+/* ── Form Grid ── */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 24px;
+}
+
+.form-grid.three-col {
+    grid-template-columns: 1fr 1fr 1fr;
+}
+
+.form-grid .full-span {
+    grid-column: 1 / -1;
+}
+
+/* ── Field Group ── */
+.field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.field-group label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.field-group input,
+.field-group select,
+.field-group textarea {
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 14px;
+    font-family: inherit;
+    transition: all 0.2s ease;
+    outline: none;
+    width: 100%;
+}
+
+.field-group input:focus,
+.field-group select:focus,
+.field-group textarea:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.field-group input::placeholder {
+    color: #475569;
+}
+
+.field-group select {
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+}
+
+.field-group select option {
+    background: #1e293b;
+    color: #e2e8f0;
+}
+
+.field-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* ── Checkbox Row ── */
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.checkbox-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.checkbox-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #3b82f6;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.checkbox-row span {
+    font-size: 14px;
+    color: #cbd5e1;
+}
+
+/* ── Subjects Table ── */
+.subjects-table-wrap {
+    overflow-x: auto;
+    margin-top: 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.subjects-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.subjects-table thead th {
+    background: rgba(255, 255, 255, 0.06);
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    white-space: nowrap;
+}
+
+.subjects-table thead th.center {
+    text-align: center;
+}
+
+.subjects-table tbody tr {
+    transition: background 0.15s ease;
+}
+
+.subjects-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.subjects-table tbody td {
+    padding: 4px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    vertical-align: middle;
+}
+
+.subjects-table tbody td input,
+.subjects-table tbody td select {
+    padding: 7px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    width: 100%;
+    transition: all 0.15s ease;
+}
+
+.subjects-table tbody td input:focus,
+.subjects-table tbody td select:focus {
+    border-color: #3b82f6;
+    background: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+
+.subjects-table tbody td input.grade-cell {
+    text-align: center;
+    width: 70px;
+}
+
+.subjects-table tbody td select {
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 100px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%2394a3b8' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 26px;
+}
+
+.subjects-table tbody td select option {
+    background: #1e293b;
+    color: #e2e8f0;
+}
+
+.subjects-table tbody td .action-passed {
+    color: #4ade80;
+    font-weight: 600;
+}
+
+.subjects-table tbody td .action-failed {
+    color: #f87171;
+    font-weight: 600;
+}
+
+.row-num {
+    color: #475569;
+    font-size: 11px;
+    text-align: center;
+    width: 30px;
+    user-select: none;
+}
+
+/* ── Add/Remove Subject Buttons ── */
+.subject-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.btn-add-row,
+.btn-remove-row {
+    padding: 6px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-add-row {
+    background: rgba(74, 222, 128, 0.1);
+    color: #4ade80;
+    border-color: rgba(74, 222, 128, 0.2);
+}
+
+.btn-add-row:hover {
+    background: rgba(74, 222, 128, 0.2);
+}
+
+.btn-remove-row {
+    background: rgba(248, 113, 113, 0.1);
+    color: #f87171;
+    border-color: rgba(248, 113, 113, 0.2);
+}
+
+.btn-remove-row:hover {
+    background: rgba(248, 113, 113, 0.2);
+}
+
+/* ── Remedial Sub-Section ── */
+.remedial-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.remedial-section h4 {
+    color: #f59e0b;
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── Gen Ave Row ── */
+.gen-ave-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: rgba(59, 130, 246, 0.06);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: 8px;
+}
+
+.gen-ave-row label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #93c5fd;
+    white-space: nowrap;
+}
+
+.gen-ave-row input {
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    width: 120px;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.gen-ave-row input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* ── Signatory Row ── */
+.signatory-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+/* ── Editor Container ── */
+.student-editor-container {
+    width: 100%;
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+/* ── Print: hide editor UI, show paper ── */
+@media print {
+
+    .editor-tabs,
+    .editor-section,
+    .subject-actions,
+    .student-editor-container {
+        display: none !important;
+    }
+}
