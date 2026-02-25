@@ -292,20 +292,23 @@ function Sidebar({
                                 </button>
                             )}
                         </div>
-                        {!isAtRoot && (
-                            <div className="breadcrumbs">
-                                <span className="crumb-root" onClick={() => setViewPath([])}>Grades</span>
-                                <span className="sep">/</span>
-                                {viewPath.map((path, i) => (
-                                    <React.Fragment key={i}>
-                                        <span onClick={() => setViewPath(viewPath.slice(0, i + 1))}>
-                                            {path}
-                                        </span>
-                                        {i < viewPath.length - 1 && <span className="sep">/</span>}
-                                    </React.Fragment>
-                                ))}
-                            </div>
-                        )}
+                        <div className="breadcrumbs">
+                            <span className="crumb-root" onClick={() => setViewPath([])}>Grades</span>
+                            {!isAtRoot && <span className="sep">/</span>}
+                            {viewPath.map((path, i) => (
+                                <React.Fragment key={i}>
+                                    <span onClick={() => setViewPath(viewPath.slice(0, i + 1))}>
+                                        {i === 0 ? `GRADE ${path}` : path}
+                                    </span>
+                                    {(i < viewPath.length - 1 || (i === viewPath.length - 1 && Array.isArray(visibleContent))) && (
+                                        <span className="sep">/</span>
+                                    )}
+                                </React.Fragment>
+                            ))}
+                            {Array.isArray(visibleContent) && (
+                                <span className="crumb-virtual">Students</span>
+                            )}
+                        </div>
                     </div>
                 )}
 
