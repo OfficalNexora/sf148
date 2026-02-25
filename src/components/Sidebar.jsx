@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 function Sidebar({
     structure,
@@ -21,6 +21,7 @@ function Sidebar({
     pendingSyncCount = 0,
     onOpenSyncInbox
 }) {
+    const [viewPath, setViewPath] = useState([]); // Array of keys for drill-down navigation
     // Determine if searching specifically for irregular students
     const isIrregularSearch = useMemo(() => {
         if (!searchQuery) return false;
@@ -84,120 +85,130 @@ function Sidebar({
         );
     };
 
+    const goBack = () => {
+        setViewPath(prev => prev.slice(0, -1));
+    };
+
+    const navigateTo = (key) => {
+        setViewPath(prev => [...prev, key]);
+    };
+
     const renderTree = (obj, path = []) => {
         if (!obj) return null;
 
-        const keys = Object.keys(obj);
-        const depth = path.length;
+        // Drill-down logic: If searching, show full tree. 
+        // If not searching, show ONLY the level matching viewPath.
+        const isSearching = !!searchQuery;
+        const currentDepth = path.length;
+        const targetDepth = viewPath.length;
 
-        // Sorting: Grades usually 11, 12. 
-        // We can sort keys if needed, but let's stick to object order for now.
+        // If we are deeper than the target depth and not searching, don't render children here
+        // (This part is handled by the calling logic usually, but let's be explicit)
+
+        const keys = Object.keys(obj);
 
         return keys.map((key) => {
             const currentPath = [...path, key];
             const pathKey = currentPath.join('|');
             const value = obj[key];
-            const isExpanded = searchQuery ? expandedPaths.has(pathKey) : false;
-
-            // Determine if this is a leaf node (Section with students array)
             const isSection = Array.isArray(value);
+            const isMatch = isSearching && expandedPaths.has(pathKey);
+
+            // In drill-down mode (not searching), we only render if path matches viewPath
+            if (!isSearching) {
+                // If this item's path is not a prefix of viewPath and vice versa, skip
+                // Actually, we resolve the sub-object first in the main render return.
+            }
 
             return (
-                <li key={pathKey} className="tree-node">
-                    <details open={isExpanded}>
-                        <summary className="tree-summary">
-                            <span className="summary-content">
-                                <span className="label">
-                                    {depth === 0 ? `Grade ${key}` : key}
-                                </span>
-                                {isEditMode && (
-                                    <span className="action-buttons">
-                                        <button
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                if (depth === 0) onAddStrand(currentPath);
-                                                else if (depth === 1) onAddSection(currentPath);
-                                                else if (isSection) onAddStudent(currentPath);
-                                            }}
-                                            className="action-btn add"
-                                            title="Add Sub-item"
-                                        >
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDeleteItem(currentPath); }}
-                                            className="action-btn delete"
-                                            title="Delete Item"
-                                        >
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                                        </button>
-                                    </span>
-                                )}
+                <li key={pathKey} className="tree-node drill-down-item">
+                    <div
+                        className={`tree-item-row ${isSection ? 'section' : 'folder'}`}
+                        onClick={() => !isSection && navigateTo(key)}
+                    >
+                        <span className="summary-content">
+                            <span className="label">
+                                {!isSection && <span className="folder-icon">📁</span>}
+                                {currentDepth === 0 ? `Grade ${key}` : key}
                             </span>
-                        </summary>
-                        <ul className="tree-list">
-                            {isSection ? (
-                                // Render students
-                                value.map((student, index) => {
-                                    let isMatch = false;
-                                    if (isIrregularSearch) {
-                                        isMatch = !!student.irregular;
-                                    } else if (searchQuery) {
-                                        isMatch = student.name.toLowerCase().includes(searchQuery.toLowerCase());
-                                    }
-
-                                    if (searchQuery && !isMatch) return null;
-
-                                    return (
-                                        <li
-                                            key={student.id}
-                                            className={`student-node ${isMatch ? 'search-highlight' : ''}`}
-                                            onClick={() => onStudentSelect(student.id, student.name)}
-                                        >
-                                            <div className="student-content">
-                                                <span className="student-name">
-                                                    {highlightText(student.name, searchQuery)}
-                                                    {student.irregular && (
-                                                        <span className="irregular-badge">IRR</span>
-                                                    )}
-                                                </span>
-                                                {isEditMode && (
-                                                    <span className="student-actions">
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                onToggleIrregular(student.id);
-                                                            }}
-                                                            className={`status-btn ${student.irregular ? 'active' : ''}`}
-                                                            title={student.irregular ? 'Remove Irregular status' : 'Mark as Irregular'}
-                                                        >
-                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill={student.irregular ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                onDeleteItem([...currentPath, index]);
-                                                            }}
-                                                            className="delete-btn"
-                                                        >
-                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                                                        </button>
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </li>
-                                    );
-                                })
-                            ) : (
-                                renderTree(value, currentPath)
+                            {isEditMode && (
+                                <span className="action-buttons">
+                                    <button
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            if (currentDepth === 0) onAddStrand(currentPath);
+                                            else if (currentDepth === 1) onAddSection(currentPath);
+                                            else if (isSection) onAddStudent(currentPath);
+                                        }}
+                                        className="action-btn add"
+                                        title="Add Sub-item"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDeleteItem(currentPath); }}
+                                        className="action-btn delete"
+                                        title="Delete Item"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                                    </button>
+                                </span>
                             )}
+                        </span>
+                        {!isSection && <span className="chevron-right">›</span>}
+                    </div>
+
+                    {isSearching && isSection && (
+                        <ul className="tree-list">
+                            {value.map((student, index) => {
+                                let studentMatch = false;
+                                if (isIrregularSearch) studentMatch = !!student.irregular;
+                                else studentMatch = student.name.toLowerCase().includes(searchQuery.toLowerCase());
+                                if (!studentMatch) return null;
+
+                                return (
+                                    <li
+                                        key={student.id}
+                                        className="student-node search-highlight"
+                                        onClick={() => onStudentSelect(student.id, student.name)}
+                                    >
+                                        <div className="student-content">
+                                            <span className="student-name">
+                                                {highlightText(student.name, searchQuery)}
+                                            </span>
+                                        </div>
+                                    </li>
+                                );
+                            })}
                         </ul>
-                    </details>
+                    )}
+                    {isSearching && !isSection && isMatch && (
+                        <ul className="tree-list">
+                            {renderTree(value, currentPath)}
+                        </ul>
+                    )}
                 </li>
             );
         });
     };
+
+    // Helper to get current visible object
+    const getVisibleContent = () => {
+        let current = structure;
+        for (const part of viewPath) {
+            if (current && current[part]) {
+                current = current[part];
+            } else {
+                return null;
+            }
+        }
+        return current;
+    };
+
+    const visibleContent = getVisibleContent();
+    const isAtRoot = viewPath.length === 0;
+    const isSearching = !!searchQuery;
 
     return (
         <aside className="sidebar">
@@ -269,17 +280,75 @@ function Sidebar({
             </div>
 
             <div className="tree-container" id="tree-root">
+                {/* Navigation Header */}
+                {!isSearching && !isAtRoot && (
+                    <div className="nav-header">
+                        <button className="back-btn" onClick={goBack}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+                            Back
+                        </button>
+                        <div className="breadcrumbs">
+                            {viewPath.map((path, i) => (
+                                <span key={i} onClick={() => setViewPath(viewPath.slice(0, i + 1))}>
+                                    {path}
+                                    {i < viewPath.length - 1 && <span className="sep">›</span>}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
-                {isEditMode && (
+                {isEditMode && isAtRoot && (
                     <button
                         className="btn-primary"
                         onClick={onAddGrade}
-                        style={{ width: '100%', marginBottom: '10px', padding: '5px', fontSize: '12px' }}
+                        style={{ width: '100%', marginBottom: '10px', padding: '10px', fontSize: '12px' }}
                     >
                         + Add Grade Level
                     </button>
                 )}
-                <ul>{renderTree(structure)}</ul>
+
+                <ul className="drill-down-list">
+                    {isSearching ? (
+                        renderTree(structure)
+                    ) : (
+                        Array.isArray(visibleContent) ? (
+                            // Render section students
+                            visibleContent.map((student, index) => (
+                                <li
+                                    key={student.id}
+                                    className="student-node"
+                                    onClick={() => onStudentSelect(student.id, student.name)}
+                                >
+                                    <div className="student-content">
+                                        <span className="student-name">
+                                            {student.name}
+                                            {student.irregular && <span className="irregular-badge">IRR</span>}
+                                        </span>
+                                        {isEditMode && (
+                                            <span className="student-actions">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onToggleIrregular(student.id); }}
+                                                    className={`status-btn ${student.irregular ? 'active' : ''}`}
+                                                >
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill={student.irregular ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onDeleteItem([...viewPath, index]); }}
+                                                    className="delete-btn"
+                                                >
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                                                </button>
+                                            </span>
+                                        )}
+                                    </div>
+                                </li>
+                            ))
+                        ) : (
+                            renderTree(visibleContent, viewPath)
+                        )
+                    )}
+                </ul>
             </div>
 
 
