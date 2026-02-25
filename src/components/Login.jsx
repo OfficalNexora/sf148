@@ -78,29 +78,47 @@ function Login({ onLogin }) {
         }
 
         const animate = () => {
+            if (document.hidden) {
+                animationRef.current = null;
+                return;
+            }
             ctx.clearRect(0, 0, width, height);
-            particlesRef.current = particlesRef.current.filter(p => {
+
+            // Loop backwards for safe splicing
+            const particles = particlesRef.current;
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
                 p.update();
                 p.draw();
-                return !(p.type === 'burst' && p.life <= 0);
-            });
+                if (p.type === 'burst' && p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
             animationRef.current = requestAnimationFrame(animate);
         };
         animate();
 
         const handleClick = (e) => {
-            const rect = container.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            const x = e.nativeEvent.offsetX;
+            const y = e.nativeEvent.offsetY;
             for (let i = 0; i < 10; i++) {
                 particlesRef.current.push(new Particle(x, y, 'burst'));
             }
         };
+
+        const handleVisibility = () => {
+            if (!document.hidden && !animationRef.current) {
+                animate();
+            }
+        };
+
         container.addEventListener('mousedown', handleClick);
+        document.addEventListener('visibilitychange', handleVisibility);
 
         return () => {
             window.removeEventListener('resize', resize);
             container.removeEventListener('mousedown', handleClick);
+            document.removeEventListener('visibilitychange', handleVisibility);
             if (animationRef.current) {
                 cancelAnimationFrame(animationRef.current);
             }
