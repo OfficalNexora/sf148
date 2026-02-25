@@ -245,7 +245,7 @@ function Sidebar({
                 style={{ padding: '30px 10px', borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}
             >
                 <img
-                    src="assets/images/capas_senior_high_school.jpg"
+                    src="/assets/images/capas_senior_high_school.jpg"
                     alt="School Logo"
                     className="brand-logo"
                     style={{ width: '100px', height: '100px', borderWidth: '3px', borderRadius: '50%' }}

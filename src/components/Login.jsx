@@ -173,7 +173,7 @@ function Login({ onLogin }) {
                     <canvas id="particle-canvas" ref={canvasRef}></canvas>
                     <div className="brand-content">
                         <img
-                            src="assets/images/capas_senior_high_school.jpg"
+                            src="/assets/images/capas_senior_high_school.jpg"
                             alt="School Logo"
                             className="brand-logo"
                         />
@@ -218,6 +218,7 @@ function Login({ onLogin }) {
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                                 disabled={isLoading}
+                                autoComplete="username"
                             />
                         </div>
 
@@ -234,6 +235,7 @@ function Login({ onLogin }) {
                                     onChange={(e) => setPassword(e.target.value)}
                                     onKeyPress={handleKeyPress}
                                     disabled={isLoading}
+                                    autoComplete="current-password"
                                 />
                                 <span
                                     id="toggle-password"
