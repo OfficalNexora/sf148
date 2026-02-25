@@ -83,16 +83,28 @@ function Setup({ onSetupComplete }) {
             }
             ctx.clearRect(0, 0, width, height);
 
-            // Loop backwards for safe splicing
             const particles = particlesRef.current;
+
+            // Batch draw normal particles
+            ctx.beginPath();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+
             for (let i = particles.length - 1; i >= 0; i--) {
                 const p = particles[i];
                 p.update();
-                p.draw();
-                if (p.type === 'burst' && p.life <= 0) {
-                    particles.splice(i, 1);
+
+                if (p.type === 'normal') {
+                    ctx.moveTo(p.x + p.size, p.y);
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                } else {
+                    p.draw();
+                    if (p.life <= 0) {
+                        particles.splice(i, 1);
+                    }
                 }
             }
+            ctx.fill();
+
             animationRef.current = requestAnimationFrame(animate);
         };
         animate();
@@ -100,8 +112,9 @@ function Setup({ onSetupComplete }) {
         const handleClick = (e) => {
             const x = e.nativeEvent.offsetX;
             const y = e.nativeEvent.offsetY;
+            const particles = particlesRef.current;
             for (let i = 0; i < 10; i++) {
-                particlesRef.current.push(new Particle(x, y, 'burst'));
+                particles.push(new Particle(x, y, 'burst'));
             }
         };
 

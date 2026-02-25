@@ -74,52 +74,72 @@ function Sidebar({
         return expanded;
     }, [structure, searchQuery, isIrregularSearch]);
 
+    const highlightText = (text, query) => {
+        if (!query || !text) return text;
+        const parts = text.split(new RegExp(`(${query})`, 'gi'));
+        return parts.map((part, i) =>
+            part.toLowerCase() === query.toLowerCase()
+                ? <span key={i} className="search-highlight-text">{part}</span>
+                : part
+        );
+    };
+
     const renderTree = (obj, path = []) => {
         if (!obj) return null;
 
-        return Object.keys(obj).map((key) => {
+        const keys = Object.keys(obj);
+        const depth = path.length;
+
+        // Sorting: Grades usually 11, 12. 
+        // We can sort keys if needed, but let's stick to object order for now.
+
+        return keys.map((key) => {
             const currentPath = [...path, key];
             const pathKey = currentPath.join('|');
             const value = obj[key];
-            const shouldExpand = searchQuery ? expandedPaths.has(pathKey) : false;
+            const isExpanded = searchQuery ? expandedPaths.has(pathKey) : false;
 
-            if (Array.isArray(value)) {
-                // Section with students
-                const students = value;
-                const hasStudentMatch = shouldExpand; // Pre-calculated
+            // Determine if this is a leaf node (Section with students array)
+            const isSection = Array.isArray(value);
 
-                return (
-                    <li key={pathKey} data-path={pathKey}>
-                        <details open={shouldExpand || hasStudentMatch}>
-                            <summary>
-                                <span>{key}</span>
+            return (
+                <li key={pathKey} className="tree-node">
+                    <details open={isExpanded}>
+                        <summary className="tree-summary">
+                            <span className="summary-content">
+                                <span className="label">
+                                    {depth === 0 ? `Grade ${key}` : key}
+                                </span>
                                 {isEditMode && (
-                                    <span style={{ marginLeft: '10px', display: 'inline-flex', gap: '5px' }}>
+                                    <span className="action-buttons">
                                         <button
-                                            onClick={(e) => { e.preventDefault(); onAddStudent(currentPath); }}
-                                            title="Add Student"
-                                            style={{ cursor: 'pointer', background: 'none', border: 'none', padding: '2px' }}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                if (depth === 0) onAddStrand(currentPath);
+                                                else if (depth === 1) onAddSection(currentPath);
+                                                else if (isSection) onAddStudent(currentPath);
+                                            }}
+                                            className="action-btn add"
+                                            title="Add Sub-item"
                                         >
-                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                                <circle cx="8" cy="8" r="7" fill="#28a745" stroke="#ffffff" strokeWidth="1" />
-                                                <path d="M8 4V12M4 8H12" stroke="white" strokeWidth="2" strokeLinecap="round" />
-                                            </svg>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
                                         </button>
                                         <button
-                                            onClick={(e) => { e.preventDefault(); onDeleteItem(currentPath); }}
-                                            title="Delete Section"
-                                            style={{ cursor: 'pointer', background: 'none', border: 'none', padding: '2px' }}
+                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDeleteItem(currentPath); }}
+                                            className="action-btn delete"
+                                            title="Delete Item"
                                         >
-                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                                <circle cx="8" cy="8" r="7" fill="#dc3545" stroke="#ffffff" strokeWidth="1" />
-                                                <path d="M5 5L11 11M11 5L5 11" stroke="white" strokeWidth="2" strokeLinecap="round" />
-                                            </svg>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
                                         </button>
                                     </span>
                                 )}
-                            </summary>
-                            <ul>
-                                {value.map((student, index) => {
+                            </span>
+                        </summary>
+                        <ul className="tree-list">
+                            {isSection ? (
+                                // Render students
+                                value.map((student, index) => {
                                     let isMatch = false;
                                     if (isIrregularSearch) {
                                         isMatch = !!student.irregular;
@@ -127,114 +147,55 @@ function Sidebar({
                                         isMatch = student.name.toLowerCase().includes(searchQuery.toLowerCase());
                                     }
 
-                                    // When searching, hide non-matches
                                     if (searchQuery && !isMatch) return null;
 
                                     return (
                                         <li
                                             key={student.id}
                                             className={`student-node ${isMatch ? 'search-highlight' : ''}`}
-                                            data-student-name={student.name.toLowerCase()}
                                             onClick={() => onStudentSelect(student.id, student.name)}
                                         >
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    {student.name}
+                                            <div className="student-content">
+                                                <span className="student-name">
+                                                    {highlightText(student.name, searchQuery)}
                                                     {student.irregular && (
-                                                        <span className="irregular-badge" title="Irregular Student">IRR</span>
+                                                        <span className="irregular-badge">IRR</span>
                                                     )}
                                                 </span>
                                                 {isEditMode && (
-                                                    <span style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
-                                                        {/* Irregular toggle */}
+                                                    <span className="student-actions">
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 onToggleIrregular(student.id);
                                                             }}
+                                                            className={`status-btn ${student.irregular ? 'active' : ''}`}
                                                             title={student.irregular ? 'Remove Irregular status' : 'Mark as Irregular'}
-                                                            style={{
-                                                                cursor: 'pointer',
-                                                                background: 'none',
-                                                                border: 'none',
-                                                                padding: '2px',
-                                                                fontSize: '14px',
-                                                                lineHeight: 1
-                                                            }}
                                                         >
-                                                            <svg width="14" height="14" viewBox="0 0 24 24"
-                                                                fill={student.irregular ? '#fbbf24' : 'none'}
-                                                                stroke={student.irregular ? '#fbbf24' : '#888'}
-                                                                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                                                            >
-                                                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                                                            </svg>
+                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill={student.irregular ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                                                         </button>
-                                                        {/* Delete */}
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 onDeleteItem([...currentPath, index]);
                                                             }}
-                                                            style={{ cursor: 'pointer', background: 'none', border: 'none', padding: '2px', marginLeft: '2px' }}
+                                                            className="delete-btn"
                                                         >
-                                                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                                                                <circle cx="8" cy="8" r="7" fill="#dc3545" stroke="#ffffff" strokeWidth="1" />
-                                                                <path d="M5 5L11 11M11 5L5 11" stroke="white" strokeWidth="2" strokeLinecap="round" />
-                                                            </svg>
+                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12" /></svg>
                                                         </button>
                                                     </span>
                                                 )}
                                             </div>
                                         </li>
                                     );
-                                })}
-                            </ul>
-                        </details>
-                    </li>
-                );
-            } else {
-                // Grade or Strand
-                const depth = path.length;
-                return (
-                    <li key={pathKey} data-path={pathKey}>
-                        <details open={shouldExpand}>
-                            <summary>
-                                <span>{key}</span>
-                                {isEditMode && (
-                                    <span style={{ marginLeft: '10px', display: 'inline-flex', gap: '5px' }}>
-                                        <button
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                if (depth === 0) onAddStrand(currentPath);
-                                                else if (depth === 1) onAddSection(currentPath);
-                                            }}
-                                            title="Add Sub-item"
-                                            style={{ cursor: 'pointer', background: 'none', border: 'none', padding: '2px' }}
-                                        >
-                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                                <circle cx="8" cy="8" r="7" fill="#28a745" stroke="#ffffff" strokeWidth="1" />
-                                                <path d="M8 4V12M4 8H12" stroke="white" strokeWidth="2" strokeLinecap="round" />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.preventDefault(); onDeleteItem(currentPath); }}
-                                            title="Delete Item"
-                                            style={{ cursor: 'pointer', background: 'none', border: 'none', padding: '2px' }}
-                                        >
-                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                                <circle cx="8" cy="8" r="7" fill="#dc3545" stroke="#ffffff" strokeWidth="1" />
-                                                <path d="M5 5L11 11M11 5L5 11" stroke="white" strokeWidth="2" strokeLinecap="round" />
-                                            </svg>
-                                        </button>
-                                    </span>
-                                )}
-                            </summary>
-                            <ul>{renderTree(value, currentPath)}</ul>
-                        </details>
-                    </li>
-                );
-            }
+                                })
+                            ) : (
+                                renderTree(value, currentPath)
+                            )}
+                        </ul>
+                    </details>
+                </li>
+            );
         });
     };
 
@@ -242,16 +203,16 @@ function Sidebar({
         <aside className="sidebar">
             <div
                 className="brand-content"
-                style={{ padding: '30px 10px', borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}
+                style={{ padding: '15px 10px', borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}
             >
                 <img
                     src="/assets/images/capas_senior_high_school.jpg"
                     alt="School Logo"
                     className="brand-logo"
-                    style={{ width: '100px', height: '100px', borderWidth: '3px', borderRadius: '50%' }}
+                    style={{ width: '80px', height: '80px', borderWidth: '2px', borderRadius: '50%', marginBottom: '10px' }}
                 />
-                <h1 style={{ fontSize: '14px', marginTop: '15px', lineHeight: 1.4, color: 'white', fontWeight: 'bold' }}>
-                    CAPAS SENIOR HIGH<br />FORM137 RECORDS
+                <h1 style={{ fontSize: '13px', marginTop: '0', lineHeight: 1.2, color: 'white', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    Capas Senior High<br /><span style={{ opacity: 0.8, fontSize: '11px' }}>Form 137 Records</span>
                 </h1>
             </div>
 
