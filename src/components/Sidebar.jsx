@@ -124,12 +124,15 @@ function Sidebar({
                 <li key={pathKey} className="tree-node drill-down-item">
                     <div
                         className={`tree-item-row ${isSection ? 'section' : 'folder'}`}
-                        onClick={() => navigateTo(key)}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            navigateTo(key);
+                        }}
                     >
                         <span className="summary-content">
                             <span className="label">
                                 {!isSection && <span className="folder-icon">📁</span>}
-                                {currentDepth === 0 ? (key.toString().toUpperCase().startsWith('GRADE') ? key : `Grade ${key}`) : key}
+                                {currentDepth === 0 ? (key.toString().match(/^GRADE /i) ? key : `Grade ${key}`) : key}
                             </span>
                             {isEditMode && (
                                 <span className="action-buttons">
@@ -295,16 +298,25 @@ function Sidebar({
                         <div className="breadcrumbs">
                             <span className="crumb-root" onClick={() => setViewPath([])}>Grades</span>
                             {!isAtRoot && <span className="sep">/</span>}
-                            {viewPath.map((path, i) => (
-                                <React.Fragment key={i}>
-                                    <span onClick={() => setViewPath(viewPath.slice(0, i + 1))}>
-                                        {i === 0 ? (path.toString().toUpperCase().startsWith('GRADE') ? path : `GRADE ${path}`) : path}
-                                    </span>
-                                    {(i < viewPath.length - 1 || (i === viewPath.length - 1 && Array.isArray(visibleContent))) && (
-                                        <span className="sep">/</span>
-                                    )}
-                                </React.Fragment>
-                            ))}
+                            {viewPath.map((path, i) => {
+                                let label = path;
+                                if (i === 0) {
+                                    label = path.toString().match(/^GRADE /i) ? path : `GRADE ${path}`;
+                                } else if (i === 2) {
+                                    label = path.toString().match(/^SECTION /i) ? path : `SECTION ${path}`;
+                                }
+
+                                return (
+                                    <React.Fragment key={i}>
+                                        <span onClick={() => setViewPath(viewPath.slice(0, i + 1))}>
+                                            {label}
+                                        </span>
+                                        {(i < viewPath.length - 1 || (i === viewPath.length - 1 && Array.isArray(visibleContent))) && (
+                                            <span className="sep">/</span>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
                             {Array.isArray(visibleContent) && (
                                 <span className="crumb-virtual">Students</span>
                             )}
