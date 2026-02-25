@@ -124,12 +124,12 @@ function Sidebar({
                 <li key={pathKey} className="tree-node drill-down-item">
                     <div
                         className={`tree-item-row ${isSection ? 'section' : 'folder'}`}
-                        onClick={() => !isSection && navigateTo(key)}
+                        onClick={() => navigateTo(key)}
                     >
                         <span className="summary-content">
                             <span className="label">
                                 {!isSection && <span className="folder-icon">📁</span>}
-                                {currentDepth === 0 ? `Grade ${key}` : key}
+                                {currentDepth === 0 ? (key.toString().toUpperCase().startsWith('GRADE') ? key : `Grade ${key}`) : key}
                             </span>
                             {isEditMode && (
                                 <span className="action-buttons">
@@ -298,7 +298,7 @@ function Sidebar({
                             {viewPath.map((path, i) => (
                                 <React.Fragment key={i}>
                                     <span onClick={() => setViewPath(viewPath.slice(0, i + 1))}>
-                                        {i === 0 ? `GRADE ${path}` : path}
+                                        {i === 0 ? (path.toString().toUpperCase().startsWith('GRADE') ? path : `GRADE ${path}`) : path}
                                     </span>
                                     {(i < viewPath.length - 1 || (i === viewPath.length - 1 && Array.isArray(visibleContent))) && (
                                         <span className="sep">/</span>
