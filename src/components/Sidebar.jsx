@@ -134,19 +134,6 @@ function Sidebar({
                             {isEditMode && (
                                 <span className="action-buttons">
                                     <button
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            if (currentDepth === 0) onAddStrand(currentPath);
-                                            else if (currentDepth === 1) onAddSection(currentPath);
-                                            else if (isSection) onAddStudent(currentPath);
-                                        }}
-                                        className="action-btn add"
-                                        title="Add Sub-item"
-                                    >
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
-                                    </button>
-                                    <button
                                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDeleteItem(currentPath); }}
                                         className="action-btn delete"
                                         title="Delete Item"
@@ -214,16 +201,16 @@ function Sidebar({
         <aside className="sidebar">
             <div
                 className="brand-content"
-                style={{ padding: '15px 10px', borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}
+                style={{ padding: '20px 10px', borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}
             >
-                <img
-                    src="/assets/images/capas_senior_high_school.jpg"
-                    alt="School Logo"
-                    className="brand-logo"
-                    style={{ width: '80px', height: '80px', borderWidth: '2px', borderRadius: '50%', marginBottom: '10px' }}
-                />
+                <div className="brand-icon-wrapper" style={{ marginBottom: '12px' }}>
+                    <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                        <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                    </svg>
+                </div>
                 <h1 style={{ fontSize: '13px', marginTop: '0', lineHeight: 1.2, color: 'white', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                    Capas Senior High<br /><span style={{ opacity: 0.8, fontSize: '11px' }}>Form 137 Records</span>
+                    Capas Senior High<br /><span style={{ opacity: 0.8, fontSize: '11px' }}>Form 137 System</span>
                 </h1>
             </div>
 
@@ -280,32 +267,46 @@ function Sidebar({
             </div>
 
             <div className="tree-container" id="tree-root">
-                {/* Navigation Header */}
-                {!isSearching && !isAtRoot && (
+                {/* Context-Aware Navigation/Add Header */}
+                {!isSearching && (
                     <div className="nav-header">
-                        <button className="back-btn" onClick={goBack}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
-                            Back
-                        </button>
-                        <div className="breadcrumbs">
-                            {viewPath.map((path, i) => (
-                                <span key={i} onClick={() => setViewPath(viewPath.slice(0, i + 1))}>
-                                    {path}
-                                    {i < viewPath.length - 1 && <span className="sep">›</span>}
-                                </span>
-                            ))}
+                        <div className="nav-row">
+                            {!isAtRoot && (
+                                <button className="back-btn" onClick={goBack}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+                                    Back
+                                </button>
+                            )}
+                            {isEditMode && (
+                                <button
+                                    className="add-context-btn"
+                                    onClick={() => {
+                                        if (isAtRoot) onAddGrade();
+                                        else if (viewPath.length === 1) onAddStrand(viewPath);
+                                        else if (viewPath.length === 2) onAddSection(viewPath);
+                                        else if (Array.isArray(visibleContent)) onAddStudent(viewPath);
+                                    }}
+                                >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 5v14M5 12h14" /></svg>
+                                    Add {isAtRoot ? 'Grade' : viewPath.length === 1 ? 'Strand' : viewPath.length === 2 ? 'Section' : 'Student'}
+                                </button>
+                            )}
                         </div>
+                        {!isAtRoot && (
+                            <div className="breadcrumbs">
+                                <span className="crumb-root" onClick={() => setViewPath([])}>Grades</span>
+                                <span className="sep">/</span>
+                                {viewPath.map((path, i) => (
+                                    <React.Fragment key={i}>
+                                        <span onClick={() => setViewPath(viewPath.slice(0, i + 1))}>
+                                            {path}
+                                        </span>
+                                        {i < viewPath.length - 1 && <span className="sep">/</span>}
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                )}
-
-                {isEditMode && isAtRoot && (
-                    <button
-                        className="btn-primary"
-                        onClick={onAddGrade}
-                        style={{ width: '100%', marginBottom: '10px', padding: '10px', fontSize: '12px' }}
-                    >
-                        + Add Grade Level
-                    </button>
                 )}
 
                 <ul className="drill-down-list">
