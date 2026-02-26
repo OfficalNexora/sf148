@@ -147,106 +147,6 @@ function StudentEditor({ data, onChange, onSave }) {
 
         // Basic Validation: Clamping grades 0-100
         let processedValue = value;
-        if (field === 'q1' || field === 'q2') {
-            const num = parseFloat(value);
-            if (!isNaN(num)) {
-                if (num > 100) processedValue = '100';
-                if (num < 0) processedValue = '0';
-            }
-        }
-
-        newData[semKey].subjects[idx] = { ...newData[semKey].subjects[idx], [field]: processedValue };
-
-        // 1. Auto-calculate Final Grade & Action (if Q1 or Q2 changed)
-        const subj = newData[semKey].subjects[idx];
-        const q1 = parseFloat(subj.q1);
-        const q2 = parseFloat(subj.q2);
-
-        if (!isNaN(q1) && !isNaN(q2)) {
-            const final = Math.round((q1 + q2) / 2);
-            subj.final = final.toString();
-            subj.action = final >= 75 ? 'PASSED' : 'FAILED';
-        } else {
-            // Keep it empty if data is incomplete
-            subj.final = '';
-            subj.action = '';
-        }
-
-        // 2. Auto-calculate General Average & Remarks (based on all subjects)
-        const subjects = newData[semKey].subjects;
-        let total = 0;
-        let count = 0;
-        let hasFailures = false;
-
-        subjects.forEach(s => {
-            const f = parseFloat(s.final);
-            if (!isNaN(f)) {
-                total += f;
-                count++;
-                if (f < 75) hasFailures = true;
-            }
-        });
-
-        if (count > 0) {
-            const genAve = Math.round(total / count);
-            newData[semKey].genAve = genAve.toString();
-            newData[semKey].remarks = (genAve >= 75 && !hasFailures) ? 'PROMOTED' : 'RETAINED';
-        } else {
-            newData[semKey].genAve = '';
-            newData[semKey].remarks = '';
-        }
-
-        onChange(newData);
-        scheduleAutoSave(newData);
-    }, [data, onChange, scheduleAutoSave]);
-
-    const updateAnnexSub = useCallback((idx, field, value) => {
-        const newData = { ...data };
-        if (!newData.annex) {
-            newData.annex = Array(36).fill(null).map((_, i) => {
-                let type = 'Other';
-                if (i < 15) type = 'Core';
-                else if (i < 22) type = 'Applied';
-                else if (i < 31) type = 'Specialized';
-                return { type, subject: '', active: true };
-            });
-        }
-        newData.annex = [...newData.annex];
-        newData.annex[idx] = { ...newData.annex[idx], [field]: value };
-
-        onChange(newData);
-        scheduleAutoSave(newData);
-    }, [data, onChange, scheduleAutoSave]);
-
-    // ── Table Keyboard Navigation ──
-    const handleTableKeyDown = useCallback((e, semKey) => {
-        const target = e.target;
-        if (!target.classList.contains('grade-cell') && target.tagName !== 'INPUT' && target.tagName !== 'SELECT') return;
-
-        const field = target.getAttribute('data-field');
-        const idx = parseInt(target.getAttribute('data-idx'));
-        if (isNaN(idx)) return;
-
-        const fields = ['type', 'subject', 'q1', 'q2'];
-        const colIdx = fields.indexOf(field);
-
-        let nextIdx = idx;
-        let nextField = field;
-
-        if (e.key === 'ArrowUp') {
-            nextIdx = Math.max(0, idx - 1);
-        } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
-            const list = semKey === 'annex' ? (data.annex || []) : (data[semKey]?.subjects || []);
-            nextIdx = Math.min(list.length - 1, idx + 1);
-            if (e.key === 'Enter') e.preventDefault();
-        } else if (e.key === 'ArrowLeft' && target.selectionStart === 0) {
-            if (colIdx > 0) nextField = fields[colIdx - 1];
-        } else if (e.key === 'ArrowRight' && target.selectionEnd === (target.value?.length || 0)) {
-            if (colIdx < fields.length - 1) nextField = fields[colIdx + 1];
-        } else {
-            return; // Not a nav key or selection isn't at edge
-        }
-
         if (nextIdx !== idx || nextField !== field) {
             // Find the element and focus it
             setTimeout(() => {
@@ -317,6 +217,53 @@ function StudentEditor({ data, onChange, onSave }) {
     }, [data, onChange, scheduleAutoSave]);
 
     // ── Utility Helpers ──
+
+    const loadTemplateSubjects = useCallback(async () => {
+        if ((data.annex || []).some(a => a.subject && a.subject.trim() !== '')) {
+            if (!window.confirm('This will overwrite your current Annex Master List with the default K-12 subjects. Continue?')) return;
+        }
+        try {
+            const res = await fetch('/form137-Helper_IMPORTANT__.json');
+            if (!res.ok) throw new Error('Helper file not found');
+            const rows = await res.json();
+
+            // Column structure: [index, bool, Core, Applied, Specialized, Other, ...]
+            const core = [], applied = [], specialized = [], other = [];
+
+            // Skip the first 3 header rows
+            rows.slice(3).forEach(row => {
+                if (!Array.isArray(row)) return;
+                const coreVal = row[2];
+                const appliedVal = row[3];
+                const specializedVal = row[4];
+                const otherVal = row[5];
+                if (coreVal && typeof coreVal === 'string' && coreVal.trim() !== '') core.push(coreVal.trim());
+                if (appliedVal && typeof appliedVal === 'string' && appliedVal.trim() !== '') applied.push(appliedVal.trim());
+                if (specializedVal && typeof specializedVal === 'string' && specializedVal.trim() !== '' && specializedVal !== 'PlaceHolder') specialized.push(specializedVal.trim());
+                if (otherVal && typeof otherVal === 'string' && otherVal.trim() !== '' && otherVal !== 'PlaceHolder') other.push(otherVal.trim());
+            });
+
+            const newAnnex = Array(36).fill(null).map((_, i) => {
+                let type = 'Other';
+                if (i < 15) type = 'Core';
+                else if (i < 22) type = 'Applied';
+                else if (i < 31) type = 'Specialized';
+                return { type, subject: '', active: true };
+            });
+
+            core.forEach((s, i) => { if (i < 15) newAnnex[i] = { ...newAnnex[i], subject: s }; });
+            applied.forEach((s, i) => { if (i < 7) newAnnex[15 + i] = { ...newAnnex[15 + i], subject: s }; });
+            specialized.forEach((s, i) => { if (i < 9) newAnnex[22 + i] = { ...newAnnex[22 + i], subject: s }; });
+            other.forEach((s, i) => { if (i < 5) newAnnex[31 + i] = { ...newAnnex[31 + i], subject: s }; });
+
+            const newData = { ...data, annex: newAnnex };
+            onChange(newData);
+            scheduleAutoSave(newData);
+        } catch (e) {
+            console.error('Failed to load template subjects:', e);
+            alert('Could not load template subjects. Make sure you have a valid template file.');
+        }
+    }, [data, onChange, scheduleAutoSave]);
 
     const clearGrades = useCallback((semKey) => {
         if (!window.confirm('Are you sure you want to clear ALL grades for this semester? Subjects will remain.')) return;
@@ -1127,9 +1074,28 @@ function StudentEditor({ data, onChange, onSave }) {
                         <div style={{ background: 'rgba(59, 130, 246, 0.2)', padding: '8px', borderRadius: '8px', display: 'flex', flexShrink: 0 }}>
                             <span style={{ fontSize: '18px', lineHeight: 1 }}>①</span>
                         </div>
-                        <div>
+                        <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: '700', color: '#fff', marginBottom: '4px' }}>Define Subjects Here First</div>
-                            <div style={{ opacity: 0.8, lineHeight: 1.5 }}>Type all your subjects in this Master List. Check the box to make them appear in the dropdown when entering grades in the semester tabs.</div>
+                            <div style={{ opacity: 0.8, lineHeight: 1.5, marginBottom: '10px' }}>Type your subjects in this Master List, or click the button to auto-fill with standard K-12 subjects from the template.</div>
+                            <button
+                                onClick={loadTemplateSubjects}
+                                style={{
+                                    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                    border: 'none',
+                                    color: '#fff',
+                                    padding: '7px 14px',
+                                    borderRadius: '8px',
+                                    fontSize: '12px',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                }}
+                            >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                Load from Template
+                            </button>
                         </div>
                     </div>
                     <div style={{
