@@ -216,6 +216,27 @@ ipcMain.handle('save-student', async (event, { id, data }) => {
     }
 });
 
+// GET ALL STUDENT RECORDS
+ipcMain.handle('get-all-records', async () => {
+    try {
+        if (!fs.existsSync(RECORDS_DIR)) return [];
+        const files = fs.readdirSync(RECORDS_DIR).filter(f => f.endsWith('.json'));
+        const records = [];
+        for (const file of files) {
+            try {
+                const parsed = JSON.parse(fs.readFileSync(path.join(RECORDS_DIR, file)));
+                records.push(parsed);
+            } catch (err) {
+                console.error('Failed reading record file:', file, err.message);
+            }
+        }
+        return records;
+    } catch (err) {
+        console.error('Failed to get all records:', err);
+        return [];
+    }
+});
+
 // USB SCANNER (Windows)
 ipcMain.handle('scan-usb', async () => {
     const drives = [];
@@ -357,6 +378,41 @@ ipcMain.handle('export-sync', async () => {
     }
 });
 
+function applySyncData(syncData) {
+    if (!syncData || !syncData.structure || !Array.isArray(syncData.records)) {
+        throw new Error('Invalid sync data format.');
+    }
+
+    // 1. Merge Structure
+    const structPath = path.join(DATA_DIR, 'structure.json');
+    let currentStruct = {};
+    if (fs.existsSync(structPath)) {
+        currentStruct = JSON.parse(fs.readFileSync(structPath));
+    }
+    const mergedStructure = deepMerge(currentStruct, syncData.structure);
+    fs.writeFileSync(structPath, JSON.stringify(mergedStructure, null, 2));
+
+    // 2. Merge Records
+    for (const recordData of syncData.records) {
+        const id = recordData.id || recordData.info?.lrn;
+        if (!id) continue;
+
+        const recordPath = path.join(RECORDS_DIR, `${id}.json`);
+        let mergedRecord = recordData;
+        if (fs.existsSync(recordPath)) {
+            try {
+                const existing = JSON.parse(fs.readFileSync(recordPath));
+                mergedRecord = deepMerge(existing, recordData);
+            } catch (err) {
+                console.error('Failed to parse existing record, overwriting:', id, err.message);
+            }
+        }
+        fs.writeFileSync(recordPath, JSON.stringify(mergedRecord, null, 2));
+    }
+
+    return syncData.records.length;
+}
+
 // IMPORT SYNC FILE
 ipcMain.handle('import-sync', async () => {
     try {
@@ -370,30 +426,18 @@ ipcMain.handle('import-sync', async () => {
 
         const syncData = JSON.parse(fs.readFileSync(filePaths[0]));
 
-        if (!syncData.structure || !syncData.records) {
-            return { success: false, error: 'Invalid sync file format.' };
-        }
+        const count = applySyncData(syncData);
+        return { success: true, count };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+});
 
-        // 1. Merge Structure
-        const structPath = path.join(DATA_DIR, 'structure.json');
-        let currentStruct = {};
-        if (fs.existsSync(structPath)) {
-            currentStruct = JSON.parse(fs.readFileSync(structPath));
-        }
-
-        const mergedStructure = deepMerge(currentStruct, syncData.structure);
-        fs.writeFileSync(structPath, JSON.stringify(mergedStructure, null, 2));
-
-        // 2. Merge Records
-        for (const recordData of syncData.records) {
-            const id = recordData.id || recordData.info?.lrn;
-            if (id) {
-                const recordPath = path.join(RECORDS_DIR, `${id}.json`);
-                fs.writeFileSync(recordPath, JSON.stringify(recordData, null, 2));
-            }
-        }
-
-        return { success: true, count: syncData.records.length };
+// IMPORT SYNC DATA DIRECTLY (FROM WEB INBOX MERGE FLOW)
+ipcMain.handle('import-sync-data', async (event, syncData) => {
+    try {
+        const count = applySyncData(syncData);
+        return { success: true, count };
     } catch (err) {
         return { success: false, error: err.message };
     }

@@ -8,6 +8,7 @@ import db from '../services/db';
 import syncService from '../services/syncService';
 
 function Dashboard({ userRole, onLogout }) {
+    const isDesktopMode = db.isElectron();
     const [structure, setStructure] = useState(null);
     const [isEditMode, setIsEditMode] = useState(false);
     const [currentStudent, setCurrentStudent] = useState(null);
@@ -289,7 +290,7 @@ function Dashboard({ userRole, onLogout }) {
     const exportToExcel = async () => {
         if (!currentStudentData) return;
 
-        if (db.isElectron()) {
+        if (isDesktopMode) {
             // Electron: use IPC for full template-based export
             const ipcRenderer = window.require('electron').ipcRenderer;
             const result = await ipcRenderer.invoke('export-excel', currentStudentData);
@@ -363,7 +364,7 @@ function Dashboard({ userRole, onLogout }) {
             return;
         }
 
-        if (db.isElectron()) {
+        if (isDesktopMode) {
             const ipcRenderer = window.require('electron').ipcRenderer;
             const filePath = await ipcRenderer.invoke('save-file-dialog', `Form137_${currentStudentData.info.lname}.json`);
             if (!filePath) return;
@@ -385,7 +386,7 @@ function Dashboard({ userRole, onLogout }) {
     const importStudent = async () => {
         let importedData = null;
 
-        if (db.isElectron()) {
+        if (isDesktopMode) {
             const ipcRenderer = window.require('electron').ipcRenderer;
             const filePath = await ipcRenderer.invoke('open-file-dialog');
             if (!filePath) return;
@@ -509,6 +510,7 @@ function Dashboard({ userRole, onLogout }) {
                 }}
                 onShare={() => setShareModal(true)}
                 onLogout={onLogout}
+                isDesktopMode={isDesktopMode}
                 pendingSyncCount={pendingSyncs.length}
                 onOpenSyncInbox={() => setShowSyncInbox(true)}
             />
@@ -528,6 +530,19 @@ function Dashboard({ userRole, onLogout }) {
                     </div>
                     <div className="status-bar" style={{ color: statusColor }}>{status}</div>
                 </div>
+                {!isDesktopMode && (
+                    <div style={{
+                        margin: '8px 16px 0 16px',
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        color: '#93c5fd',
+                        background: 'rgba(59,130,246,0.12)',
+                        border: '1px solid rgba(59,130,246,0.35)'
+                    }}>
+                        Web mode: data is stored in this browser. Use Online Database Sync to share records across devices.
+                    </div>
+                )}
 
                 <div className="editor-viewport">
                     <div id="editor-content">
@@ -536,6 +551,7 @@ function Dashboard({ userRole, onLogout }) {
                         ) : currentStudentData ? (
                             <StudentEditor
                                 data={currentStudentData}
+                                isDesktopMode={isDesktopMode}
                                 onChange={(newData) => {
                                     setCurrentStudentData(newData);
                                     setStatus('Unsaved...');
@@ -613,13 +629,7 @@ function Dashboard({ userRole, onLogout }) {
                                         try {
                                             // Gather local DB snapshot
                                             const structureData = await db.getStructure();
-                                            const bdb = db._getBrowserDB ? db._getBrowserDB() : null;
-                                            let records = [];
-                                            if (bdb) {
-                                                await bdb.ready;
-                                                const rawRecords = await bdb._getAll('records');
-                                                records = rawRecords.map(r => r.data);
-                                            }
+                                            const records = await db.getAllRecords();
                                             const syncData = { structure: structureData, records };
                                             const result = await syncService.submitSync(sendToAdminName.trim(), syncData);
                                             if (result.success) {
@@ -644,7 +654,7 @@ function Dashboard({ userRole, onLogout }) {
                                 onClick={exportSyncDb}
                             >
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}><polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path></svg>
-                                Download Sync File (offline fallback)
+                                {isDesktopMode ? 'Download Sync File (offline fallback)' : 'Download Sync File'}
                             </button>
                             {userRole === 'admin' && (
                                 <button

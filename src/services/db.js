@@ -1,15 +1,24 @@
 /**
- * db.js — Unified data service for Form 137 React App.
- * 
- * Detects runtime environment and routes calls to either:
- *   - Electron IPC (when running inside Electron)
- *   - IndexedDB + localStorage (when running in a normal browser)
- * 
- * All public methods mirror the Electron IPC channel signatures exactly,
- * making component migration a simple import swap.
+ * Unified data service for Form 137 React App.
+ *
+ * Runtime routing:
+ * - Electron: IPC channels handled by electron/main.js
+ * - Browser: Firestore-backed shared data (users, structure, records)
  */
 
-// --- Runtime Detection ---
+import {
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    limit,
+    query,
+    setDoc
+} from 'firebase/firestore';
+import { getFirebaseDb } from './firebaseClient';
+
+// Runtime detection
 let isElectron = false;
 let ipcRenderer = null;
 let nodeCrypto = null;
@@ -22,31 +31,47 @@ try {
         isElectron = true;
     }
 } catch (e) {
-    // Not in Electron — browser mode
     isElectron = false;
 }
 
-// =====================================================================
-// SHA-256 hashing (browser-compatible with fallback)
-// =====================================================================
+const STORAGE_KEYS = {
+    role: 'currentUserRole',
+    username: 'currentUsername'
+};
+
+const DEFAULT_STRUCTURE = {
+    'Grade 11': {
+        'TVL - ICT': {
+            'Section A': []
+        }
+    }
+};
+
+const USERS_COLLECTION = 'users';
+const RECORDS_COLLECTION = 'records';
+const APPDATA_COLLECTION = 'appData';
+const STRUCTURE_DOC_ID = 'structure';
+
+function getBrowserFirestore() {
+    return getFirebaseDb();
+}
 
 async function hashPassword(password) {
-    // Electron: use Node crypto
     if (isElectron && nodeCrypto) {
         return nodeCrypto.createHash('sha256').update(password).digest('hex');
     }
 
-    // Browser: prefer Web Crypto API
     if (typeof crypto !== 'undefined' && crypto.subtle) {
         try {
             const msgBuffer = new TextEncoder().encode(password);
             const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
             return Array.from(new Uint8Array(hashBuffer))
                 .map(b => b.toString(16).padStart(2, '0')).join('');
-        } catch (e) { /* fall through */ }
+        } catch (e) {
+            // Fall through to JS fallback.
+        }
     }
 
-    // Fallback: pure JS SHA-256
     return sha256Fallback(password);
 }
 
@@ -54,6 +79,7 @@ function sha256Fallback(str) {
     function rightRotate(value, amount) {
         return (value >>> amount) | (value << (32 - amount));
     }
+
     const mathPow = Math.pow;
     const maxWord = mathPow(2, 32);
     let result = '';
@@ -63,6 +89,7 @@ function sha256Fallback(str) {
     const k = [];
     let primeCounter = 0;
     const isComposite = {};
+
     for (let candidate = 2; primeCounter < 64; candidate++) {
         if (!isComposite[candidate]) {
             for (let i = 0; i < 313; i += candidate) isComposite[i] = candidate;
@@ -70,21 +97,28 @@ function sha256Fallback(str) {
             k[primeCounter++] = (mathPow(candidate, 1 / 3) * maxWord) | 0;
         }
     }
+
     str += '\x80';
     while ((str.length % 64) - 56) str += '\x00';
+
     for (let i = 0; i < str.length; i++) {
         const j = str.charCodeAt(i);
         if (j >> 8) return '';
         words[i >> 2] |= j << (((3 - i) % 4) * 8);
     }
+
     words[words.length] = ((asciiBitLength / maxWord) | 0);
     words[words.length] = (asciiBitLength);
+
     for (let j = 0; j < words.length;) {
         const w = words.slice(j, j += 16);
         const oldHash = hash.slice(0);
+
         for (let i = 0; i < 64; i++) {
-            const w15 = w[i - 15], w2 = w[i - 2];
-            const a = hash[0], e = hash[4];
+            const w15 = w[i - 15];
+            const w2 = w[i - 2];
+            const a = hash[0];
+            const e = hash[4];
             const temp1 = hash[7]
                 + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25))
                 + ((e & hash[5]) ^ ((~e) & hash[6]))
@@ -100,20 +134,20 @@ function sha256Fallback(str) {
             hash = [(temp1 + temp2) | 0].concat(hash);
             hash[4] = (hash[4] + temp1) | 0;
         }
+
         for (let i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
     }
+
     for (let i = 0; i < 8; i++) {
         for (let j = 3; j + 1; j--) {
             const b = (hash[i] >> (j * 8)) & 255;
             result += ((b < 16) ? '0' : '') + b.toString(16);
         }
     }
+
     return result;
 }
 
-// =====================================================================
-// Deep Merge Helper
-// =====================================================================
 function deepMerge(target, source) {
     if (typeof target !== 'object' || target === null) return source;
     if (typeof source !== 'object' || source === null) return target;
@@ -122,7 +156,6 @@ function deepMerge(target, source) {
     Object.keys(source).forEach(key => {
         if (Array.isArray(source[key])) {
             const existingArray = output[key] || [];
-            // Merge arrays by ID (students)
             const idMap = new Map();
             existingArray.forEach(item => idMap.set(item.id, item));
             source[key].forEach(item => idMap.set(item.id, item));
@@ -133,306 +166,310 @@ function deepMerge(target, source) {
             output[key] = source[key];
         }
     });
+
     return output;
 }
 
-// =====================================================================
-// IndexedDB Backend (browser mode only)
-// =====================================================================
+async function ensureStructureDoc(firestore) {
+    const structureRef = doc(firestore, APPDATA_COLLECTION, STRUCTURE_DOC_ID);
+    const structureSnap = await getDoc(structureRef);
 
-class BrowserDB {
-    constructor() {
-        this.dbName = 'Form137App';
-        this.dbVersion = 1;
-        this.db = null;
-        this.ready = this._init();
+    if (structureSnap.exists()) {
+        return structureSnap.data().data || null;
     }
 
-    async _init() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, this.dbVersion);
-
-            request.onerror = (e) => {
-                console.error('IndexedDB error:', e.target.error);
-                reject(e.target.error);
-            };
-
-            request.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains('users'))
-                    db.createObjectStore('users', { keyPath: 'username' });
-                if (!db.objectStoreNames.contains('structure'))
-                    db.createObjectStore('structure', { keyPath: 'id' });
-                if (!db.objectStoreNames.contains('records'))
-                    db.createObjectStore('records', { keyPath: 'id' });
-            };
-
-            request.onsuccess = async (e) => {
-                this.db = e.target.result;
-                await this._ensureDefaults();
-                resolve();
-            };
-        });
-    }
-
-    async _ensureDefaults() {
-        // Seed default structure if it doesn't exist
-        const structure = await this._get('structure', 'main');
-        if (!structure) {
-            await this._put('structure', {
-                id: 'main',
-                data: { "Grade 11": { "TVL - ICT": { "Section A": [] } } }
-            });
-        }
-    }
-
-    _get(store, key) {
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction([store], 'readonly');
-            const req = tx.objectStore(store).get(key);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    _getAll(store) {
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction([store], 'readonly');
-            const req = tx.objectStore(store).getAll();
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    _put(store, value) {
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction([store], 'readwrite');
-            const req = tx.objectStore(store).put(value);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    _delete(store, key) {
-        return new Promise((resolve, reject) => {
-            const tx = this.db.transaction([store], 'readwrite');
-            const req = tx.objectStore(store).delete(key);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    }
+    await setDoc(structureRef, { data: DEFAULT_STRUCTURE });
+    return DEFAULT_STRUCTURE;
 }
-
-// Singleton — only created in browser mode
-let browserDB = null;
-function getBrowserDB() {
-    if (!browserDB) browserDB = new BrowserDB();
-    return browserDB;
-}
-
-// =====================================================================
-// Unified Public API
-// =====================================================================
 
 const db = {
-    // --- Auth & Setup ---
     async checkNeedsSetup() {
         if (isElectron) {
             return ipcRenderer.invoke('check-needs-setup');
         }
-        const bdb = getBrowserDB();
-        await bdb.ready;
-        const users = await bdb._getAll('users');
-        return users.length === 0;
+
+        const firestore = getBrowserFirestore();
+        const usersRef = collection(firestore, USERS_COLLECTION);
+        const usersSnap = await getDocs(query(usersRef, limit(1)));
+        return usersSnap.empty;
     },
 
     async setupAdmin(username, password) {
         if (isElectron) {
             const result = await ipcRenderer.invoke('setup-admin', { username, password });
             if (result.success) {
-                localStorage.setItem('currentUserRole', result.role);
+                localStorage.setItem(STORAGE_KEYS.role, result.role);
+                localStorage.setItem(STORAGE_KEYS.username, username);
             }
             return result;
         }
 
-        const bdb = getBrowserDB();
-        await bdb.ready;
-        const users = await bdb._getAll('users');
-        if (users.length > 0) {
-            return { success: false, error: 'Setup already complete.' };
+        try {
+            const firestore = getBrowserFirestore();
+            const usersRef = collection(firestore, USERS_COLLECTION);
+            const usersSnap = await getDocs(query(usersRef, limit(1)));
+            if (!usersSnap.empty) {
+                return { success: false, error: 'Setup already complete.' };
+            }
+
+            const adminUser = {
+                username,
+                password: await hashPassword(password),
+                role: 'admin',
+                fullName: 'System Administrator',
+                createdAt: new Date().toISOString()
+            };
+
+            await setDoc(doc(firestore, USERS_COLLECTION, username), adminUser);
+            localStorage.setItem(STORAGE_KEYS.role, 'admin');
+            localStorage.setItem(STORAGE_KEYS.username, username);
+            return { success: true, role: 'admin' };
+        } catch (err) {
+            return { success: false, error: err.message };
         }
-
-        const adminUser = {
-            username,
-            password: await hashPassword(password),
-            role: 'admin',
-            fullName: 'System Administrator',
-            createdAt: new Date().toISOString()
-        };
-
-        await bdb._put('users', adminUser);
-        localStorage.setItem('currentUserRole', 'admin');
-        return { success: true, role: 'admin' };
     },
 
     async login(username, password) {
         if (isElectron) {
             const result = await ipcRenderer.invoke('login', { username, password });
             if (result.success) {
-                localStorage.setItem('currentUserRole', result.role);
+                localStorage.setItem(STORAGE_KEYS.role, result.role);
+                localStorage.setItem(STORAGE_KEYS.username, username);
             }
             return result;
         }
 
-        const bdb = getBrowserDB();
-        await bdb.ready;
-        const users = await bdb._getAll('users');
-        for (const u of users) {
-            if (u.username === username) {
-                if (u.password.length === 64) {
-                    const hashed = await hashPassword(password);
-                    if (u.password === hashed) {
-                        localStorage.setItem('currentUserRole', u.role);
-                        return { success: true, role: u.role };
-                    }
-                } else {
-                    if (u.password === password) {
-                        localStorage.setItem('currentUserRole', u.role);
-                        return { success: true, role: u.role };
-                    }
-                }
+        try {
+            const firestore = getBrowserFirestore();
+            const userRef = doc(firestore, USERS_COLLECTION, username);
+            const userSnap = await getDoc(userRef);
+            if (!userSnap.exists()) {
+                return { success: false };
             }
+
+            const user = userSnap.data();
+            let isValid = false;
+            if (user.password && user.password.length === 64) {
+                const hashed = await hashPassword(password);
+                isValid = user.password === hashed;
+            } else {
+                isValid = user.password === password;
+            }
+
+            if (!isValid) {
+                return { success: false };
+            }
+
+            localStorage.setItem(STORAGE_KEYS.role, user.role);
+            localStorage.setItem(STORAGE_KEYS.username, user.username || username);
+            return { success: true, role: user.role };
+        } catch (err) {
+            return { success: false, error: err.message };
         }
-        return { success: false };
     },
 
     async logout() {
-        localStorage.removeItem('currentUserRole');
+        localStorage.removeItem(STORAGE_KEYS.role);
+        localStorage.removeItem(STORAGE_KEYS.username);
+
         if (isElectron) {
             await ipcRenderer.invoke('logout');
         }
+
         return { success: true };
     },
 
     async getCurrentUserRole() {
-        // Always check localStorage first (works in both modes)
-        const stored = localStorage.getItem('currentUserRole');
-        if (stored) return stored;
+        const storedRole = localStorage.getItem(STORAGE_KEYS.role);
+        const storedUsername = localStorage.getItem(STORAGE_KEYS.username);
 
         if (isElectron) {
+            if (storedRole) return storedRole;
             const role = await ipcRenderer.invoke('get-current-user-role');
-            if (role) localStorage.setItem('currentUserRole', role);
+            if (role) localStorage.setItem(STORAGE_KEYS.role, role);
             return role;
         }
-        return null;
+
+        if (!storedRole || !storedUsername) return null;
+
+        try {
+            const firestore = getBrowserFirestore();
+            const userSnap = await getDoc(doc(firestore, USERS_COLLECTION, storedUsername));
+            if (!userSnap.exists()) {
+                localStorage.removeItem(STORAGE_KEYS.role);
+                localStorage.removeItem(STORAGE_KEYS.username);
+                return null;
+            }
+
+            const user = userSnap.data();
+            if (user.role !== storedRole) {
+                localStorage.setItem(STORAGE_KEYS.role, user.role || 'teacher');
+                return user.role || 'teacher';
+            }
+
+            return storedRole;
+        } catch {
+            return null;
+        }
     },
 
-    // --- Structure ---
     async getStructure() {
         if (isElectron) {
             return ipcRenderer.invoke('get-structure');
         }
-        const bdb = getBrowserDB();
-        await bdb.ready;
-        const record = await bdb._get('structure', 'main');
-        return record ? record.data : null;
+
+        try {
+            const firestore = getBrowserFirestore();
+            return await ensureStructureDoc(firestore);
+        } catch (err) {
+            console.error('getStructure failed:', err);
+            return DEFAULT_STRUCTURE;
+        }
     },
 
     async updateStructure(newStructure) {
         if (isElectron) {
             return ipcRenderer.invoke('update-structure', newStructure);
         }
-        const bdb = getBrowserDB();
-        await bdb.ready;
-        await bdb._put('structure', { id: 'main', data: newStructure });
-        return { success: true };
+
+        try {
+            const firestore = getBrowserFirestore();
+            await setDoc(doc(firestore, APPDATA_COLLECTION, STRUCTURE_DOC_ID), { data: newStructure });
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
     },
 
-    // --- Student Records ---
     async loadStudent(id) {
         if (isElectron) {
             return ipcRenderer.invoke('load-student', id);
         }
-        const bdb = getBrowserDB();
-        await bdb.ready;
-        const record = await bdb._get('records', id);
-        return record ? record.data : null;
+
+        const firestore = getBrowserFirestore();
+        const recordSnap = await getDoc(doc(firestore, RECORDS_COLLECTION, id));
+        if (!recordSnap.exists()) return null;
+
+        const data = recordSnap.data();
+        if (!data.id) return { ...data, id };
+        return data;
     },
 
     async saveStudent(id, data) {
         if (isElectron) {
             return ipcRenderer.invoke('save-student', { id, data });
         }
-        const bdb = getBrowserDB();
-        await bdb.ready;
+
         try {
-            await bdb._put('records', { id, data });
+            const firestore = getBrowserFirestore();
+            const payload = { ...(data || {}) };
+            if (!payload.id) payload.id = id;
+            await setDoc(doc(firestore, RECORDS_COLLECTION, id), payload);
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };
         }
     },
 
-    // --- User Management ---
+    async getAllRecords() {
+        if (isElectron) {
+            return ipcRenderer.invoke('get-all-records');
+        }
+
+        const firestore = getBrowserFirestore();
+        const snap = await getDocs(collection(firestore, RECORDS_COLLECTION));
+        return snap.docs.map(d => {
+            const item = d.data();
+            if (!item.id) return { ...item, id: d.id };
+            return item;
+        });
+    },
+
     async getUsers() {
         if (isElectron) {
             return ipcRenderer.invoke('get-users');
         }
-        const bdb = getBrowserDB();
-        await bdb.ready;
-        const users = await bdb._getAll('users');
-        return users.map(({ password, ...safe }) => safe);
+
+        const firestore = getBrowserFirestore();
+        const snap = await getDocs(collection(firestore, USERS_COLLECTION));
+        return snap.docs.map(d => {
+            const user = d.data();
+            const { password, plainPassword, ...safe } = user;
+            return safe;
+        });
     },
 
     async createUser(newUser) {
         if (isElectron) {
             return ipcRenderer.invoke('create-user', newUser);
         }
-        const bdb = getBrowserDB();
-        await bdb.ready;
 
-        if (newUser.role !== 'teacher' && newUser.role !== 'admin') {
-            return { success: false, error: 'Invalid role.' };
-        }
+        try {
+            if (newUser.role !== 'teacher' && newUser.role !== 'admin') {
+                return { success: false, error: 'Invalid role.' };
+            }
 
-        const users = await bdb._getAll('users');
-        if (users.find(u => u.username === newUser.username)) {
-            return { success: false, error: 'User already exists.' };
-        }
+            const firestore = getBrowserFirestore();
+            const username = (newUser.username || '').trim();
+            if (!username) {
+                return { success: false, error: 'Username is required.' };
+            }
 
-        const { plainPassword, ...userToSave } = newUser;
-        if (userToSave.password) {
-            userToSave.password = await hashPassword(userToSave.password);
+            const userRef = doc(firestore, USERS_COLLECTION, username);
+            const existing = await getDoc(userRef);
+            if (existing.exists()) {
+                return { success: false, error: 'User already exists.' };
+            }
+
+            const { plainPassword, ...userToSave } = newUser;
+            userToSave.username = username;
+            userToSave.createdAt = userToSave.createdAt || new Date().toISOString();
+
+            if (userToSave.password) {
+                if (userToSave.password.length !== 64) {
+                    userToSave.password = await hashPassword(userToSave.password);
+                }
+            } else {
+                return { success: false, error: 'Password is required.' };
+            }
+
+            await setDoc(userRef, userToSave);
+            const { password, ...safeUser } = userToSave;
+            return { success: true, user: safeUser };
+        } catch (err) {
+            return { success: false, error: err.message };
         }
-        await bdb._put('users', userToSave);
-        const { password, ...safeUser } = userToSave;
-        return { success: true, user: safeUser };
     },
 
     async deleteUser(username) {
         if (isElectron) {
             return ipcRenderer.invoke('delete-user', username);
         }
-        const bdb = getBrowserDB();
-        await bdb.ready;
-        await bdb._delete('users', username);
-        return { success: true };
+
+        try {
+            const firestore = getBrowserFirestore();
+            await deleteDoc(doc(firestore, USERS_COLLECTION, username));
+            return { success: true };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
     },
 
-    // --- File Operations (browser fallbacks) ---
     async importStudentFromFile() {
-        // Browser mode: use file input
         return new Promise((resolve) => {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.json';
             input.onchange = async (e) => {
                 const file = e.target.files[0];
-                if (!file) { resolve(null); return; }
+                if (!file) {
+                    resolve(null);
+                    return;
+                }
                 try {
                     const text = await file.text();
                     resolve(JSON.parse(text));
-                } catch (err) {
+                } catch {
                     resolve(null);
                 }
             };
@@ -441,7 +478,6 @@ const db = {
     },
 
     async exportStudentToFile(data, filename) {
-        // Browser mode: download as file
         const json = JSON.stringify(data, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -453,23 +489,19 @@ const db = {
         return { success: true };
     },
 
-    // --- DB Syncing (Hub & Spoke) ---
     async exportSyncFile() {
         if (isElectron) {
             return ipcRenderer.invoke('export-sync');
         }
-        const bdb = getBrowserDB();
-        await bdb.ready;
 
-        const structureRecord = await bdb._get('structure', 'main');
-        const structure = structureRecord ? structureRecord.data : {};
-        const records = await bdb._getAll('records');
+        const structure = await this.getStructure();
+        const records = await this.getAllRecords();
 
         const syncData = {
             version: 1,
             timestamp: new Date().toISOString(),
             structure,
-            records: records.map(r => r.data)
+            records
         };
 
         const json = JSON.stringify(syncData, null, 2);
@@ -490,47 +522,22 @@ const db = {
             return ipcRenderer.invoke('import-sync');
         }
 
-        // Browser mode: open file picker
         return new Promise((resolve) => {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.f137sync,.json';
             input.onchange = async (e) => {
                 const file = e.target.files[0];
-                if (!file) { resolve({ success: false, error: 'No file selected' }); return; }
+                if (!file) {
+                    resolve({ success: false, error: 'No file selected' });
+                    return;
+                }
+
                 try {
                     const text = await file.text();
                     const syncData = JSON.parse(text);
-
-                    if (!syncData.structure || !syncData.records) {
-                        resolve({ success: false, error: 'Invalid sync file format' });
-                        return;
-                    }
-
-                    const bdb = getBrowserDB();
-                    await bdb.ready;
-
-                    // 1. Merge Structure
-                    const currentStructRec = await bdb._get('structure', 'main');
-                    const currentStruct = currentStructRec ? currentStructRec.data : {};
-
-                    // Simple merge: overwrite current with incoming (for sync purpose)
-                    // Or ideally deep merge, but for now we'll do an overwrite of existing branches, but keep local refs?
-                    // Actually, the user approved "incoming overwrites".
-                    // But an absolute overwrite of the WHOLE structure might wipe out local Admin additions.
-                    // Let's do a basic deep merge.
-                    const mergedStructure = deepMerge(currentStruct, syncData.structure);
-                    await bdb._put('structure', { id: 'main', data: mergedStructure });
-
-                    // 2. Merge Records
-                    for (const recordData of syncData.records) {
-                        const id = recordData.id || recordData.info?.lrn;
-                        if (id) {
-                            await bdb._put('records', { id, data: recordData });
-                        }
-                    }
-
-                    resolve({ success: true, count: syncData.records.length });
+                    const result = await this.importSyncData(syncData);
+                    resolve(result);
                 } catch (err) {
                     resolve({ success: false, error: err.message });
                 }
@@ -539,83 +546,41 @@ const db = {
         });
     },
 
-    /**
-     * Merge a sync data object directly (used by online SyncInbox after decoding from Firestore).
-     * @param {object} syncData - { structure, records[] }
-     */
     async importSyncData(syncData) {
         if (!syncData || !syncData.structure || !syncData.records) {
             return { success: false, error: 'Invalid sync data format' };
         }
 
         if (isElectron) {
-            // Electron: write structure + records directly to disk
-            try {
-                const fs = window.require('fs');
-                const path = window.require('path');
-                const DATA_DIR = path.join(__dirname, '..', '..', 'data');
-                const RECORDS_DIR = path.join(DATA_DIR, 'records');
-
-                const structPath = path.join(DATA_DIR, 'structure.json');
-                let currentStruct = {};
-                if (fs.existsSync(structPath)) {
-                    currentStruct = JSON.parse(fs.readFileSync(structPath));
-                }
-
-                const mergedStructure = deepMerge(currentStruct, syncData.structure);
-                fs.writeFileSync(structPath, JSON.stringify(mergedStructure, null, 2));
-
-                for (const recordData of syncData.records) {
-                    const id = recordData.id || recordData.info?.lrn;
-                    if (id) {
-                        const recPath = path.join(RECORDS_DIR, `${id}.json`);
-                        let mergedRecord = recordData;
-                        if (fs.existsSync(recPath)) {
-                            const existing = JSON.parse(fs.readFileSync(recPath));
-                            mergedRecord = deepMerge(existing, recordData);
-                        }
-                        fs.writeFileSync(recPath, JSON.stringify(mergedRecord, null, 2));
-                    }
-                }
-                return { success: true, count: syncData.records.length };
-            } catch (err) {
-                console.error('Electron importSyncData error:', err);
-                return { success: false, error: err.message };
-            }
+            return ipcRenderer.invoke('import-sync-data', syncData);
         }
 
-        // Browser mode: IndexedDB
-        const bdb = getBrowserDB();
-        await bdb.ready;
+        const currentStruct = await this.getStructure();
+        const mergedStructure = deepMerge(currentStruct || {}, syncData.structure);
+        const structResult = await this.updateStructure(mergedStructure);
+        if (!structResult.success) {
+            return structResult;
+        }
 
-        const currentStructRec = await bdb._get('structure', 'main');
-        const currentStruct = currentStructRec ? currentStructRec.data : {};
-        const mergedStructure = deepMerge(currentStruct, syncData.structure);
-        await bdb._put('structure', { id: 'main', data: mergedStructure });
-
+        let savedCount = 0;
         for (const recordData of syncData.records) {
             const id = recordData.id || recordData.info?.lrn;
-            if (id) {
-                const existingRec = await bdb._get('records', id);
-                let mergedRecord = recordData;
-                if (existingRec && existingRec.data) {
-                    mergedRecord = deepMerge(existingRec.data, recordData);
-                }
-                await bdb._put('records', { id, data: mergedRecord });
-            }
+            if (!id) continue;
+
+            const existingRecord = await this.loadStudent(id);
+            const mergedRecord = existingRecord
+                ? deepMerge(existingRecord, recordData)
+                : recordData;
+
+            const result = await this.saveStudent(id, mergedRecord);
+            if (result.success) savedCount++;
         }
-        return { success: true, count: syncData.records.length };
+
+        return { success: true, count: savedCount };
     },
 
-    // --- Utility ---
     isElectron() {
         return isElectron;
-    },
-
-    // Expose the BrowserDB instance for direct access (e.g. gather all records for sync)
-    _getBrowserDB() {
-        if (isElectron) return null;
-        return getBrowserDB();
     },
 
     hashPassword

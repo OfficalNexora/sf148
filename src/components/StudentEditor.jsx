@@ -205,12 +205,13 @@ function Form137Preview({ data }) {
     );
 }
 
-function StudentEditor({ data, onChange, onSave }) {
+function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
     const [activeTab, setActiveTab] = useState('info');
     const [isPrinting, setIsPrinting] = useState(false);
     const [showChecker, setShowChecker] = useState(false);
     const [showRawData, setShowRawData] = useState(false);
     const saveTimerRef = useRef(null);
+    const printActionLabel = isDesktopMode ? 'Print to Excel' : 'Download Excel';
 
     // Cleanup save timer on unmount
     React.useEffect(() => {
@@ -456,12 +457,20 @@ function StudentEditor({ data, onChange, onSave }) {
                         alert('Failed to generate Excel file: ' + result.error);
                     }
                 } else {
-                    // Web Browser Environment (Vercel) - Fallback to browser download
-                    // We use dynamic import so we don't load the heavy exceljs library on page load
+                    // Web Browser Environment (Vercel):
+                    // 1) try local bridge server (desktop auto-open), 2) fallback to browser download.
+                    const { openExcelViaBridge } = await import('../services/excelBridgeClient');
+                    const bridgeResult = await openExcelViaBridge(data);
+                    if (bridgeResult.success) {
+                        setIsPrinting(false);
+                        return;
+                    }
+
                     const { generateExcelForm } = await import('../utils/excelGenerator');
                     const result = await generateExcelForm(data);
                     if (!result.success) {
-                        alert('Failed to generate Excel file: ' + result.error);
+                        const bridgeError = bridgeResult.error ? `Bridge: ${bridgeResult.error}` : 'Bridge unavailable';
+                        alert(`Failed to generate Excel file.\n${bridgeError}\nFallback: ${result.error}`);
                     }
                 }
             } catch (e) {
@@ -1264,7 +1273,7 @@ function StudentEditor({ data, onChange, onSave }) {
                         style={{ height: '32px', padding: '0 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', background: '#10b981' }}
                         onClick={handlePrint}
                     >
-                        <PrintIcon /> Print to Excel
+                        <PrintIcon /> {printActionLabel}
                     </button>
                 </div>
             </div>
@@ -1282,7 +1291,7 @@ function StudentEditor({ data, onChange, onSave }) {
                 }}>
                     <div className="spinner" style={{ marginBottom: '16px', border: '4px solid rgba(255,255,255,0.3)', borderTop: '4px solid white', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite' }}></div>
                     <div style={{ fontSize: '24px', marginBottom: '8px' }}>Processing...</div>
-                    <div style={{ fontSize: '16px', opacity: 0.9 }}>Opening Excel for Printing...</div>
+                    <div style={{ fontSize: '16px', opacity: 0.9 }}>{isDesktopMode ? 'Opening Excel for Printing...' : 'Generating downloadable Excel file...'}</div>
                 </div>
             )}
             {showChecker && (
