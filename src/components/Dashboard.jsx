@@ -119,10 +119,10 @@ function Dashboard({ userRole, onLogout }) {
             semester3: makeSem(),
             semester4: makeSem(),
             annex: [
-                ...Array.from({ length: 15 }, () => ({ type: 'Core', subject: '', q1: '', q2: '', final: '', action: '' })),
-                ...Array.from({ length: 7 }, () => ({ type: 'Applied', subject: '', q1: '', q2: '', final: '', action: '' })),
-                ...Array.from({ length: 9 }, () => ({ type: 'Specialized', subject: '', q1: '', q2: '', final: '', action: '' })),
-                ...Array.from({ length: 5 }, () => ({ type: 'Other', subject: '', q1: '', q2: '', final: '', action: '' }))
+                ...Array.from({ length: 15 }, () => ({ type: 'Core', subject: '', active: true })),
+                ...Array.from({ length: 7 }, () => ({ type: 'Applied', subject: '', active: true })),
+                ...Array.from({ length: 9 }, () => ({ type: 'Specialized', subject: '', active: true })),
+                ...Array.from({ length: 5 }, () => ({ type: 'Other', subject: '', active: true }))
             ],
             certification: { trackStrand: '', genAve: '', awards: '', gradDate: '', schoolHead: '', certDate: '', remarks: '', dateIssued: '' }
         };

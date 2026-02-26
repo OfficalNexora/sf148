@@ -208,11 +208,11 @@ function StudentEditor({ data, onChange, onSave }) {
                 if (i < 15) type = 'Core';
                 else if (i < 22) type = 'Applied';
                 else if (i < 31) type = 'Specialized';
-                return { type, subject: '' };
+                return { type, subject: '', active: true };
             });
         }
         newData.annex = [...newData.annex];
-        newData.annex[idx] = { ...newData.annex[idx], subject: value };
+        newData.annex[idx] = { ...newData.annex[idx], [field]: value };
 
         onChange(newData);
         scheduleAutoSave(newData);
@@ -578,7 +578,7 @@ function StudentEditor({ data, onChange, onSave }) {
 
                     <datalist id="annex-subjects">
                         {(data.annex || [])
-                            .filter(a => a.subject && a.subject.trim() !== '')
+                            .filter(a => a.active && a.subject && a.subject.trim() !== '')
                             .map((a, idx) => (
                                 <option key={idx} value={a.subject} />
                             ))}
@@ -1035,7 +1035,7 @@ function StudentEditor({ data, onChange, onSave }) {
                 if (i < 15) type = 'Core';
                 else if (i < 22) type = 'Applied';
                 else if (i < 31) type = 'Specialized';
-                return { type, subject: '' };
+                return { type, subject: '', active: true };
             });
 
             core.forEach((s, i) => { if (i < 15) newAnnex[i] = { ...newAnnex[i], subject: s.subject }; });
@@ -1063,22 +1063,36 @@ function StudentEditor({ data, onChange, onSave }) {
                     <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#e2e8f0', letterSpacing: '0.5px' }}>{label}</h3>
                 </div>
 
-                <div className="annex-grid" style={{ gridTemplateColumns: '1fr' }}>
-                    <div className="annex-header-row" style={{ gridTemplateColumns: '1fr' }}>
+                <div className="annex-grid">
+                    <div className="annex-header-row" style={{ gridTemplateColumns: '40px 1fr' }}>
+                        <div style={{ textAlign: 'center' }}>Active</div>
                         <div>Master Subject Name</div>
                     </div>
 
                     {list.map((subj, localIdx) => {
                         const i = offset + localIdx;
+                        const isActive = subj.active !== false;
                         return (
-                            <div key={i} className="annex-row" style={{ gridTemplateColumns: '1fr' }}>
+                            <div key={i} className="annex-row" style={{
+                                gridTemplateColumns: '40px 1fr',
+                                opacity: isActive ? 1 : 0.4,
+                                background: isActive ? 'rgba(255, 255, 255, 0.03)' : 'transparent'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={isActive}
+                                        onChange={(e) => updateAnnexSub(i, 'active', e.target.checked)}
+                                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                    />
+                                </div>
                                 <input
                                     placeholder="Enter subject name here..."
                                     value={subj.subject || ''}
                                     onChange={(e) => updateAnnexSub(i, 'subject', e.target.value)}
                                     onKeyDown={(e) => handleTableKeyDown(e, 'annex')}
                                     data-idx={i} data-field="subject"
-                                    style={{ width: '100%' }}
+                                    style={{ width: '100%', textDecoration: isActive ? 'none' : 'line-through' }}
                                 />
                             </div>
                         );
