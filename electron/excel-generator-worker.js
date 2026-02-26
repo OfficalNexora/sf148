@@ -170,8 +170,8 @@ process.on('message', async (msg) => {
                 });
             };
 
-            replacePlaceholders(front);
-            replacePlaceholders(back);
+            if (front) replacePlaceholders(front);
+            if (back) replacePlaceholders(back);
             if (annexSheet) replacePlaceholders(annexSheet);
 
             // --- FILL FRONT SHEET (Fallback) ---
