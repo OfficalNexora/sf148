@@ -1,12 +1,33 @@
 import React, { useState } from 'react';
 // db service available if needed in future
 
+function getIpcRenderer() {
+    try {
+        if (window.ipcRenderer) return window.ipcRenderer;
+        if (window.electron && window.electron.ipcRenderer) return window.electron.ipcRenderer;
+        if (window.require) {
+            const electron = window.require('electron');
+            if (electron && electron.ipcRenderer) return electron.ipcRenderer;
+        }
+    } catch (e) {
+        // Not running in Electron.
+    }
+    return null;
+}
+
 function PlaceholderChecker({ onClose }) {
     const [status, setStatus] = useState('ready'); // ready, scanning, done
     const [placeholders, setPlaceholders] = useState([]);
     const [error, setError] = useState(null);
 
     const scanTemplate = async () => {
+        const ipcRenderer = getIpcRenderer();
+        if (!ipcRenderer) {
+            setError('Template scanning is available only in the desktop app.');
+            setStatus('ready');
+            return;
+        }
+
         setStatus('scanning');
         setError(null);
         try {
@@ -56,7 +77,7 @@ function PlaceholderChecker({ onClose }) {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                 {placeholders.map(p => (
                                     <div key={p} style={{ fontSize: '12px', fontFamily: 'monospace', color: '#4ade80', background: 'rgba(74, 222, 128, 0.1)', padding: '4px 8px', borderRadius: '4px' }}>
-                                        %{p}
+                                        {p}
                                     </div>
                                 ))}
                             </div>

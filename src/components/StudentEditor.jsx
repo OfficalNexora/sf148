@@ -141,6 +141,70 @@ const K12_TEMPLATE_SUBJECTS = {
     Other: [],
 };
 
+function Form137Preview({ data }) {
+    const fullName = [data.info.lname, data.info.fname, data.info.mname].filter(Boolean).join(', ');
+    const semesterKeys = ['semester1', 'semester2', 'semester3', 'semester4'];
+
+    return (
+        <div style={{ color: '#111827', fontFamily: 'Arial, sans-serif', fontSize: '12px' }}>
+            <h2 style={{ marginTop: 0, marginBottom: '10px' }}>Form 137 Snapshot</h2>
+            <div style={{ marginBottom: '14px', lineHeight: 1.5 }}>
+                <div><strong>Name:</strong> {fullName || '-'}</div>
+                <div><strong>LRN:</strong> {data.info.lrn || '-'}</div>
+                <div><strong>Sex:</strong> {data.info.sex || '-'}</div>
+                <div><strong>Birthdate:</strong> {data.info.birthdate || '-'}</div>
+            </div>
+
+            {semesterKeys.map((semKey, index) => {
+                const sem = data[semKey];
+                if (!sem) return null;
+                const subjects = (sem.subjects || []).filter(s => s.subject);
+
+                return (
+                    <div key={semKey} style={{ marginBottom: '16px' }}>
+                        <h3 style={{ margin: '0 0 8px 0' }}>Semester {index + 1}</h3>
+                        <div style={{ marginBottom: '6px' }}>
+                            <strong>School:</strong> {sem.school || '-'} | <strong>SY:</strong> {sem.sy || '-'} | <strong>Section:</strong> {sem.section || '-'}
+                        </div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #d1d5db' }}>
+                            <thead>
+                                <tr style={{ background: '#f3f4f6' }}>
+                                    <th style={{ border: '1px solid #d1d5db', padding: '4px' }}>Type</th>
+                                    <th style={{ border: '1px solid #d1d5db', padding: '4px' }}>Subject</th>
+                                    <th style={{ border: '1px solid #d1d5db', padding: '4px' }}>Q1</th>
+                                    <th style={{ border: '1px solid #d1d5db', padding: '4px' }}>Q2</th>
+                                    <th style={{ border: '1px solid #d1d5db', padding: '4px' }}>Final</th>
+                                    <th style={{ border: '1px solid #d1d5db', padding: '4px' }}>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {subjects.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} style={{ border: '1px solid #d1d5db', padding: '6px', textAlign: 'center' }}>
+                                            No subjects yet.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    subjects.map((subj, i) => (
+                                        <tr key={`${semKey}-${i}`}>
+                                            <td style={{ border: '1px solid #d1d5db', padding: '4px' }}>{subj.type || ''}</td>
+                                            <td style={{ border: '1px solid #d1d5db', padding: '4px' }}>{subj.subject || ''}</td>
+                                            <td style={{ border: '1px solid #d1d5db', padding: '4px' }}>{subj.q1 || ''}</td>
+                                            <td style={{ border: '1px solid #d1d5db', padding: '4px' }}>{subj.q2 || ''}</td>
+                                            <td style={{ border: '1px solid #d1d5db', padding: '4px' }}>{subj.final || ''}</td>
+                                            <td style={{ border: '1px solid #d1d5db', padding: '4px' }}>{subj.action || ''}</td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 function StudentEditor({ data, onChange, onSave }) {
     const [activeTab, setActiveTab] = useState('info');
     const [isPrinting, setIsPrinting] = useState(false);
@@ -379,20 +443,26 @@ function StudentEditor({ data, onChange, onSave }) {
 
     // ── Handlers for Print ──
     const handlePrint = async () => {
-        // Safe check for Electron environment
-        const renderer = window.ipcRenderer || (window.electron && window.electron.ipcRenderer);
-
-        if (!renderer) {
-            alert('Excel Printing is only available in the Desktop App.\n\nFor the web version, please use the browser print function or download the desktop app.');
-            return;
-        }
-
         setIsPrinting(true);
         setTimeout(async () => {
             try {
-                const result = await renderer.invoke('print-excel-form', data);
-                if (!result.success) {
-                    alert('Failed to generate Excel file: ' + result.error);
+                // Safe check for Electron environment
+                const renderer = window.ipcRenderer || (window.electron && window.electron.ipcRenderer);
+
+                if (renderer) {
+                    // Desktop App Environment (Supports Auto-Open)
+                    const result = await renderer.invoke('print-excel-form', data);
+                    if (!result.success) {
+                        alert('Failed to generate Excel file: ' + result.error);
+                    }
+                } else {
+                    // Web Browser Environment (Vercel) - Fallback to browser download
+                    // We use dynamic import so we don't load the heavy exceljs library on page load
+                    const { generateExcelForm } = await import('../utils/excelGenerator');
+                    const result = await generateExcelForm(data);
+                    if (!result.success) {
+                        alert('Failed to generate Excel file: ' + result.error);
+                    }
                 }
             } catch (e) {
                 alert('Error printing: ' + e.message);

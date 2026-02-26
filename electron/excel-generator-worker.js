@@ -4,6 +4,330 @@
 const ExcelJS = require('exceljs');
 const path = require('path');
 const fs = require('fs');
+const XLSX = require('xlsx');
+
+const EMPTY_SUBJECT = { type: '', subject: '', q1: '', q2: '', final: '', action: '' };
+const EMPTY_REMEDIAL_SUBJECT = { type: '', subject: '', semGrade: '', remedialMark: '', recomputedGrade: '', action: '' };
+
+function makeSemester() {
+    return {
+        school: '',
+        schoolId: '',
+        gradeLevel: '',
+        sy: '',
+        sem: '',
+        trackStrand: '',
+        section: '',
+        subjects: Array.from({ length: 9 }, () => ({ ...EMPTY_SUBJECT })),
+        genAve: '',
+        remarks: '',
+        adviserName: '',
+        certName: '',
+        dateChecked: '',
+        remedial: {
+            from: '',
+            to: '',
+            school: '',
+            schoolId: '',
+            subjects: Array.from({ length: 4 }, () => ({ ...EMPTY_REMEDIAL_SUBJECT })),
+            teacherName: ''
+        }
+    };
+}
+
+function makeEmptyRecord() {
+    return {
+        info: {
+            lname: '',
+            fname: '',
+            mname: '',
+            lrn: '',
+            sex: '',
+            birthdate: '',
+            admissionDate: '',
+            irregular: false
+        },
+        eligibility: {
+            hsCompleter: false,
+            hsGenAve: '',
+            jhsCompleter: false,
+            jhsGenAve: '',
+            gradDate: '',
+            schoolName: '',
+            schoolAddress: '',
+            pept: false,
+            peptRating: '',
+            als: false,
+            alsRating: '',
+            examDate: '',
+            clcName: '',
+            others: false,
+            othersSpec: ''
+        },
+        semester1: makeSemester(),
+        semester2: makeSemester(),
+        semester3: makeSemester(),
+        semester4: makeSemester(),
+        annex: [
+            ...Array.from({ length: 15 }, () => ({ type: 'Core', subject: '', active: true })),
+            ...Array.from({ length: 7 }, () => ({ type: 'Applied', subject: '', active: true })),
+            ...Array.from({ length: 9 }, () => ({ type: 'Specialized', subject: '', active: true })),
+            ...Array.from({ length: 5 }, () => ({ type: 'Other', subject: '', active: true }))
+        ],
+        certification: {
+            trackStrand: '',
+            genAve: '',
+            awards: '',
+            gradDate: '',
+            schoolHead: '',
+            certDate: '',
+            remarks: '',
+            dateIssued: ''
+        }
+    };
+}
+
+function normalizeCell(value) {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    if (typeof value === 'object') {
+        if (typeof value.text === 'string') return value.text.trim();
+        if (Array.isArray(value.richText)) {
+            return value.richText.map(part => part.text || '').join('').trim();
+        }
+        if (value.result !== undefined && value.result !== null) {
+            return normalizeCell(value.result);
+        }
+    }
+    return String(value).trim();
+}
+
+function rowToUpper(row) {
+    return (row || []).map(cell => normalizeCell(cell).toUpperCase()).join(' ');
+}
+
+function findVal(row, label) {
+    if (!row) return '';
+    const target = label.toUpperCase();
+    const idx = row.findIndex(cell => normalizeCell(cell).toUpperCase().includes(target));
+    if (idx === -1) return '';
+    const maxIdx = Math.min(row.length - 1, idx + 10);
+    for (let i = idx + 1; i <= maxIdx; i++) {
+        const v = normalizeCell(row[i]);
+        if (v !== '') return v;
+    }
+    return '';
+}
+
+function parseSemesterBlock(grid, startRow, semData) {
+    const headerRow = grid[startRow] || [];
+    semData.school = findVal(headerRow, 'SCHOOL:') || semData.school;
+    semData.schoolId = findVal(headerRow, 'SCHOOL ID') || semData.schoolId;
+    semData.gradeLevel = findVal(headerRow, 'GRADE LEVEL') || semData.gradeLevel;
+    semData.sy = findVal(headerRow, 'SY') || semData.sy;
+    semData.sem = findVal(headerRow, 'SEM') || semData.sem;
+
+    for (let i = 1; i <= 3; i++) {
+        const row = grid[startRow + i] || [];
+        const rowUpper = rowToUpper(row);
+        if (rowUpper.includes('TRACK')) {
+            semData.trackStrand = findVal(row, 'TRACK') || semData.trackStrand;
+        }
+        if (rowUpper.includes('SECTION')) {
+            semData.section = findVal(row, 'SECTION') || semData.section;
+        }
+    }
+
+    let tableHeaderRow = -1;
+    for (let i = 1; i <= 12; i++) {
+        const row = grid[startRow + i] || [];
+        if (rowToUpper(row).includes('SUBJECTS')) {
+            tableHeaderRow = startRow + i;
+            break;
+        }
+    }
+
+    if (tableHeaderRow === -1) return;
+
+    const COL_TYPE = 0;
+    const COL_SUBJECT = 8;
+    const COL_Q1 = 45;
+    const COL_Q2 = 50;
+    const COL_FINAL = 55;
+    const COL_ACTION = 60;
+
+    const subjects = [];
+    let blankRows = 0;
+
+    for (let r = tableHeaderRow + 1; r < tableHeaderRow + 45; r++) {
+        const row = grid[r] || [];
+        const upper = rowToUpper(row);
+
+        if (upper.includes('GENERAL AVE') || upper.includes('GENERAL AVERAGE')) {
+            semData.genAve = findVal(row, 'GENERAL AVE') || findVal(row, 'GENERAL AVERAGE') || semData.genAve;
+            break;
+        }
+
+        const subject = normalizeCell(row[COL_SUBJECT]);
+        const type = normalizeCell(row[COL_TYPE]);
+        const q1 = normalizeCell(row[COL_Q1]);
+        const q2 = normalizeCell(row[COL_Q2]);
+        const final = normalizeCell(row[COL_FINAL]);
+        const action = normalizeCell(row[COL_ACTION]);
+
+        if (!subject) {
+            blankRows++;
+            if (blankRows >= 6 && subjects.length > 0) break;
+            continue;
+        }
+
+        blankRows = 0;
+        subjects.push({
+            type,
+            subject,
+            q1,
+            q2,
+            final,
+            action
+        });
+    }
+
+    if (subjects.length > 0) {
+        semData.subjects = subjects;
+    }
+}
+
+function parseSheet(grid, data, startSemNumber) {
+    let semestersFound = 0;
+
+    for (let r = 0; r < grid.length; r++) {
+        const row = grid[r] || [];
+        const rowUpper = rowToUpper(row);
+
+        if (rowUpper.includes('LAST NAME')) {
+            data.info.lname = findVal(row, 'LAST NAME') || data.info.lname;
+            data.info.fname = findVal(row, 'FIRST NAME') || data.info.fname;
+            data.info.mname = findVal(row, 'MIDDLE NAME') || data.info.mname;
+        }
+        if (rowUpper.includes('LRN')) data.info.lrn = findVal(row, 'LRN') || data.info.lrn;
+        if (rowUpper.includes('DATE OF BIRTH')) data.info.birthdate = findVal(row, 'DATE OF BIRTH') || data.info.birthdate;
+        if (rowUpper.includes('SEX')) data.info.sex = findVal(row, 'SEX') || data.info.sex;
+        if (rowUpper.includes('ADMISSION')) data.info.admissionDate = findVal(row, 'ADMISSION') || data.info.admissionDate;
+
+        if (rowUpper.includes('HIGH SCHOOL COMPLETER')) {
+            data.eligibility.hsCompleter = true;
+            data.eligibility.hsGenAve = findVal(row, 'GEN. AVE') || data.eligibility.hsGenAve;
+        }
+        if (rowUpper.includes('JUNIOR HIGH SCHOOL COMPLETER')) {
+            data.eligibility.jhsCompleter = true;
+            data.eligibility.jhsGenAve = findVal(row, 'GEN. AVE') || data.eligibility.jhsGenAve;
+        }
+        if (rowUpper.includes('DATE OF GRADUATION')) {
+            const gradDate = findVal(row, 'DATE OF GRADUATION');
+            if (gradDate) {
+                data.eligibility.gradDate = gradDate;
+                if (!data.certification.gradDate) data.certification.gradDate = gradDate;
+            }
+        }
+        if (rowUpper.includes('NAME OF SCHOOL')) data.eligibility.schoolName = findVal(row, 'NAME OF SCHOOL') || data.eligibility.schoolName;
+        if (rowUpper.includes('SCHOOL ADDRESS')) data.eligibility.schoolAddress = findVal(row, 'SCHOOL ADDRESS') || data.eligibility.schoolAddress;
+
+        if (rowUpper.includes('TRACK/STRAND')) {
+            data.certification.trackStrand = findVal(row, 'TRACK/STRAND') || data.certification.trackStrand;
+        }
+        if (rowUpper.includes('SHS GENERAL AVERAGE')) {
+            data.certification.genAve = findVal(row, 'SHS GENERAL AVERAGE') || data.certification.genAve;
+        }
+        if (rowUpper.includes('AWARDS')) {
+            data.certification.awards = findVal(row, 'AWARDS') || data.certification.awards;
+        }
+        if (rowUpper.includes('REMARKS')) {
+            data.certification.remarks = findVal(row, 'REMARKS') || data.certification.remarks;
+        }
+        if (rowUpper.includes('DATE ISSUED')) {
+            data.certification.dateIssued = findVal(row, 'DATE ISSUED') || data.certification.dateIssued;
+        }
+
+        if (
+            rowUpper.includes('SCHOOL:') &&
+            rowUpper.includes('SCHOOL ID') &&
+            semestersFound < 2
+        ) {
+            const semIndex = startSemNumber + semestersFound;
+            if (semIndex <= 4) {
+                const semKey = `semester${semIndex}`;
+                parseSemesterBlock(grid, r, data[semKey]);
+            }
+            semestersFound++;
+        }
+    }
+
+    return semestersFound;
+}
+
+function parseExcelToFormData(filePath) {
+    const wb = XLSX.readFile(filePath, { cellDates: true });
+    const data = makeEmptyRecord();
+
+    const hasFront = wb.SheetNames.some(name => name.toUpperCase().includes('FRONT'));
+    const hasBack = wb.SheetNames.some(name => name.toUpperCase().includes('BACK'));
+
+    if (hasFront || hasBack) {
+        wb.SheetNames.forEach((sheetName) => {
+            const ws = wb.Sheets[sheetName];
+            const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            const upper = sheetName.toUpperCase();
+            if (upper.includes('FRONT')) parseSheet(grid, data, 1);
+            if (upper.includes('BACK')) parseSheet(grid, data, 3);
+        });
+    } else {
+        let semCursor = 1;
+        wb.SheetNames.forEach((sheetName) => {
+            const ws = wb.Sheets[sheetName];
+            const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            const found = parseSheet(grid, data, semCursor);
+            if (found > 0) semCursor = Math.min(4, semCursor + found);
+        });
+    }
+
+    return data;
+}
+
+function excelJsCellToString(value) {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') {
+        if (Array.isArray(value.richText)) return value.richText.map(part => part.text || '').join('');
+        if (typeof value.text === 'string') return value.text;
+        if (value.result !== undefined && value.result !== null) return excelJsCellToString(value.result);
+        if (typeof value.formula === 'string' && value.result === undefined) return value.formula;
+    }
+    return String(value);
+}
+
+async function scanPlaceholders(templatePath) {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(templatePath);
+
+    const placeholderSet = new Set();
+
+    wb.worksheets.forEach((ws) => {
+        ws.eachRow((row) => {
+            row.eachCell((cell) => {
+                const cellText = excelJsCellToString(cell.value);
+                const matches = cellText.match(/%\([^)]+\)/g);
+                if (!matches) return;
+                matches.forEach((match) => placeholderSet.add(match));
+            });
+        });
+    });
+
+    return Array.from(placeholderSet);
+}
 
 process.on('message', async (msg) => {
     if (msg.type === 'generate-print-file') {
@@ -490,7 +814,26 @@ process.on('message', async (msg) => {
     }
 
     if (msg.type === 'parse-excel') {
-        // Implementation for parsing back to JSON if needed
-        process.send({ type: 'parse-result', success: false, error: 'Not implemented' });
+        try {
+            if (!msg.filePath || !fs.existsSync(msg.filePath)) {
+                throw new Error('Excel file not found.');
+            }
+            const parsed = parseExcelToFormData(msg.filePath);
+            process.send({ type: 'parse-result', success: true, data: parsed });
+        } catch (e) {
+            process.send({ type: 'parse-result', success: false, error: e.message });
+        }
+    }
+
+    if (msg.type === 'scan-placeholders') {
+        try {
+            if (!msg.templatePath || !fs.existsSync(msg.templatePath)) {
+                throw new Error('Template file not found.');
+            }
+            const placeholders = await scanPlaceholders(msg.templatePath);
+            process.send({ type: 'scan-result', success: true, placeholders });
+        } catch (e) {
+            process.send({ type: 'scan-result', success: false, error: e.message });
+        }
     }
 });

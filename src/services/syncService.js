@@ -10,7 +10,7 @@
 
 import { initializeApp } from 'firebase/app';
 import {
-    getFirestore,
+    initializeFirestore,
     collection,
     addDoc,
     updateDoc,
@@ -38,7 +38,10 @@ let db = null;
 function getDB() {
     if (!db) {
         app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
+        // Force long-polling to prevent WebChannel 400 Bad Request proxy errors
+        db = initializeFirestore(app, {
+            experimentalForceLongPolling: true
+        });
     }
     return db;
 }
