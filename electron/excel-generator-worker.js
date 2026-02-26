@@ -17,26 +17,142 @@ process.on('message', async (msg) => {
 
             const front = wb.getWorksheet('FRONT');
             const back = wb.getWorksheet('BACK');
+            const annexSheet = wb.getWorksheet('ANNEX');
 
             if (!front || !back) throw new Error('FRONT or BACK worksheet missing in template');
 
-            // --- HELPER: Find label and write relative to it ---
+            // --- HELPER: Find label and write relative to it (Fallback) ---
             const writeToLabel = (ws, label, value, offsetCol = 1, offsetRow = 0) => {
-                if (value === undefined || value === null) return;
+                if (value === undefined || value === null || value === '') return;
                 const search = label.toUpperCase();
                 ws.eachRow((row, rowNum) => {
                     row.eachCell((cell, colNum) => {
                         const cellVal = cell.value ? cell.value.toString().toUpperCase() : '';
                         if (cellVal.includes(search)) {
+                            // Only write if the target cell is EMPTY (to avoid overwriting if placeholders already did it)
                             const targetRow = ws.getRow(rowNum + offsetRow);
                             const targetCell = targetRow.getCell(colNum + offsetCol);
-                            targetCell.value = value;
+                            if (!targetCell.value) targetCell.value = value;
                         }
                     });
                 });
             };
 
-            // --- FILL FRONT SHEET ---
+            // --- HELPER: Direct Placeholder Replacement ---
+            const placeholderMap = {
+                'lname': data.info.lname,
+                'fname': data.info.fname,
+                'mname': data.info.mname,
+                'lrn': data.info.lrn,
+                'sex': data.info.sex,
+                'birthdate': data.info.birthdate,
+                'admission_date': data.info.admissionDate,
+                'hs_school': data.eligibility.schoolName,
+                'hs_addr': data.eligibility.schoolAddress,
+                'hs_ave': data.eligibility.hsGenAve,
+                'grad_date': data.eligibility.gradDate,
+                // Sem 1
+                's1_school': data.semester1.school,
+                's1_id': data.semester1.schoolId,
+                's1_level': data.semester1.gradeLevel,
+                's1_sy': data.semester1.sy,
+                's1_sem': data.semester1.sem,
+                's1_ave': data.semester1.genAve,
+                // Compatibility Aliases (from PLACEHOLDER(ALL).xlsx)
+                'lastname': data.info.lname,
+                'firstname': data.info.fname,
+                'middlename': data.info.mname,
+                'LRN': data.info.lrn,
+                'date of birth': data.info.birthdate,
+                'dateofadmission': data.info.admissionDate,
+                'genave': data.semester1.genAve, // General placeholder for first sem average
+                'track': data.semester1.trackStrand,
+                'strand': data.semester1.trackStrand,
+                'section': data.semester1.section,
+                // Sem 2
+                's2_school': data.semester2.school,
+                's2_id': data.semester2.schoolId,
+                's2_level': data.semester2.gradeLevel,
+                's2_sy': data.semester2.sy,
+                's2_sem': data.semester2.sem,
+                's2_ave': data.semester2.genAve,
+                // Sem 3
+                's3_school': data.semester3.school,
+                's3_id': data.semester3.schoolId,
+                's3_level': data.semester3.gradeLevel,
+                's3_sy': data.semester3.sy,
+                's3_sem': data.semester3.sem,
+                's3_ave': data.semester3.genAve,
+                // Sem 4
+                's4_school': data.semester4.school,
+                's4_id': data.semester4.schoolId,
+                's4_level': data.semester4.gradeLevel,
+                's4_sy': data.semester4.sy,
+                's4_sem': data.semester4.sem,
+                's4_ave': data.semester4.genAve,
+            };
+
+            // Dynamic Subject Placeholders for Semester 1-4 (Max 10 subjects each)
+            [1, 2, 3, 4].forEach(sNum => {
+                const semData = data[`semester${sNum}`];
+                if (semData && semData.subjects) {
+                    semData.subjects.forEach((subj, i) => {
+                        const idx = i + 1;
+                        placeholderMap[`s${sNum}sub_${idx}`] = subj.subject;
+                        placeholderMap[`s${sNum}q1_${idx}`] = subj.q1;
+                        placeholderMap[`s${sNum}q2_${idx}`] = subj.q2;
+                        placeholderMap[`s${sNum}fin_${idx}`] = subj.final;
+                        placeholderMap[`s${sNum}act_${idx}`] = subj.action;
+                    });
+                    // Remedial for each semester
+                    if (semData.remedial && semData.remedial.subjects) {
+                        semData.remedial.subjects.forEach((subj, i) => {
+                            const idx = i + 1;
+                            placeholderMap[`s${sNum}rem_sub_${idx}`] = subj.subject;
+                            placeholderMap[`s${sNum}rem_q1_${idx}`] = subj.semGrade;
+                            placeholderMap[`s${sNum}rem_q2_${idx}`] = subj.remedialMark;
+                            placeholderMap[`s${sNum}rem_fin_${idx}`] = subj.recomputedGrade;
+                            placeholderMap[`s${sNum}rem_act_${idx}`] = subj.action;
+                        });
+                    }
+                }
+            });
+
+            // Dynamic Annex Placeholders (Max 36 rows)
+            if (data.annex) {
+                data.annex.forEach((subj, i) => {
+                    const idx = i + 1;
+                    placeholderMap[`asub_${idx}`] = subj.subject;
+                    placeholderMap[`atype_${idx}`] = subj.type;
+                    placeholderMap[`aq1_${idx}`] = subj.q1;
+                    placeholderMap[`aq2_${idx}`] = subj.q2;
+                    placeholderMap[`afin_${idx}`] = subj.final;
+                    placeholderMap[`aact_${idx}`] = subj.action;
+                });
+            }
+
+            const replacePlaceholders = (ws) => {
+                ws.eachRow((row) => {
+                    row.eachCell((cell) => {
+                        let val = cell.value ? cell.value.toString() : '';
+                        if (val.includes('%(')) {
+                            Object.keys(placeholderMap).forEach(key => {
+                                const p = `%(${key})`;
+                                if (val.includes(p)) {
+                                    val = val.replace(p, placeholderMap[key] || '');
+                                }
+                            });
+                            cell.value = val;
+                        }
+                    });
+                });
+            };
+
+            replacePlaceholders(front);
+            replacePlaceholders(back);
+            if (annexSheet) replacePlaceholders(annexSheet);
+
+            // --- FILL FRONT SHEET (Fallback) ---
             // Learner Information
             writeToLabel(front, 'LAST NAME:', data.info.lname);
             writeToLabel(front, 'FIRST NAME:', data.info.fname);
@@ -168,7 +284,6 @@ process.on('message', async (msg) => {
                 ws.getRow(startRow).getCell(startCol + 59).value = semData.sem;
 
                 // Additional Info (Track/Section)
-                // These are usually 1 or 2 rows below or on the same line
                 ws.eachRow({ includeEmpty: false }, (row, rowNum) => {
                     if (rowNum >= startRow && rowNum <= startRow + 3) {
                         row.eachCell((cell, colNum) => {
@@ -212,6 +327,113 @@ process.on('message', async (msg) => {
                 }
             };
 
+            const fillAnnex = (ws, annexData) => {
+                if (!ws || !annexData || !annexData.length) return;
+
+                const findSectionRange = (headerText) => {
+                    let start = -1;
+                    ws.eachRow((row, rowNum) => {
+                        if (start !== -1) return;
+                        const cells = Array.isArray(row.values) ? row.values.join(' ').toUpperCase() : '';
+                        if (cells.includes(headerText.toUpperCase())) {
+                            start = rowNum;
+                        }
+                    });
+                    return start;
+                };
+
+                const coreStart = findSectionRange('CORE SUBJECTS');
+                const appliedStart = findSectionRange('APPLIED SUBJECTS');
+                const specializedStart = findSectionRange('SPECIALIZED SUBJECTS');
+                const otherStart = findSectionRange('OTHER SUBJECTS');
+
+                const markCheckbox = (row, isPassed) => {
+                    if (isPassed) {
+                        // Based on template, Col 1 or 2 is the checkbox
+                        const cell1 = row.getCell(1);
+                        const cell2 = row.getCell(2);
+                        // Write to whichever looks like a checkbox or just Col 1
+                        cell1.value = '/';
+                    }
+                };
+
+                // Core Subjects (Indices 0-14)
+                if (coreStart !== -1) {
+                    const dataRange = annexData.slice(0, 15);
+                    dataRange.forEach(subj => {
+                        if (!subj.subject) return;
+                        // Search for the subject in the rows below the header
+                        const endRow = appliedStart !== -1 ? appliedStart : coreStart + 25;
+                        for (let r = coreStart + 1; r < endRow; r++) {
+                            const row = ws.getRow(r);
+                            const rowText = (row.values || []).join(' ').toUpperCase();
+                            if (rowText.includes(subj.subject.toUpperCase())) {
+                                markCheckbox(row, subj.action === 'PASSED');
+                                break;
+                            }
+                        }
+                    });
+                }
+
+                // Applied Subjects (Indices 15-21)
+                if (appliedStart !== -1) {
+                    const dataRange = annexData.slice(15, 22);
+                    dataRange.forEach(subj => {
+                        if (!subj.subject) return;
+                        const endRow = specializedStart !== -1 ? specializedStart : appliedStart + 15;
+                        for (let r = appliedStart + 1; r < endRow; r++) {
+                            const row = ws.getRow(r);
+                            const rowText = (row.values || []).join(' ').toUpperCase();
+                            if (rowText.includes(subj.subject.toUpperCase())) {
+                                markCheckbox(row, subj.action === 'PASSED');
+                                break;
+                            }
+                        }
+                    });
+                }
+
+                // Specialized Subjects (Indices 22-30) - Blank lines
+                if (specializedStart !== -1) {
+                    const dataRange = annexData.slice(22, 31);
+                    let currentRow = specializedStart + 1;
+                    dataRange.forEach(subj => {
+                        if (!subj.subject) return;
+                        const endRow = otherStart !== -1 ? otherStart : specializedStart + 15;
+                        while (currentRow < endRow) {
+                            const row = ws.getRow(currentRow);
+                            const cell9 = row.getCell(9); // Usual subject column
+                            if (!cell9.value || cell9.value.toString().includes('PlaceHolder')) {
+                                cell9.value = subj.subject;
+                                markCheckbox(row, subj.action === 'PASSED');
+                                currentRow++;
+                                break;
+                            }
+                            currentRow++;
+                        }
+                    });
+                }
+
+                // Other Subjects (Indices 31-35) - Blank lines
+                if (otherStart !== -1) {
+                    const dataRange = annexData.slice(31, 36);
+                    let currentRow = otherStart + 1;
+                    dataRange.forEach(subj => {
+                        if (!subj.subject) return;
+                        while (currentRow < otherStart + 10) {
+                            const row = ws.getRow(currentRow);
+                            const cell9 = row.getCell(9);
+                            if (!cell9.value) {
+                                cell9.value = subj.subject;
+                                markCheckbox(row, subj.action === 'PASSED');
+                                currentRow++;
+                                break;
+                            }
+                            currentRow++;
+                        }
+                    });
+                }
+            };
+
             // Mapping:
             // FRONT: Inst 1 = Sem 1, Inst 2 = Sem 2
             // BACK: Inst 1 = Sem 3, Inst 2 = Sem 4
@@ -219,6 +441,10 @@ process.on('message', async (msg) => {
             fillSem(front, data.semester2, 2);
             fillSem(back, data.semester3, 1);
             fillSem(back, data.semester4, 2);
+
+            if (annexSheet) {
+                fillAnnex(annexSheet, data.annex);
+            }
 
             // Certification (BACK sheet)
             writeToLabel(back, 'CERTIFICATION', 'X', -1); // Just a marker
