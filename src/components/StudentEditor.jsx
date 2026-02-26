@@ -104,6 +104,43 @@ const Field = ({ label, value, onInput, type = 'text', placeholder = '', fullSpa
     </div>
 );
 
+// K-12 standard subjects from the official PLACEHOLDER(ALL).xlsx template
+// Hardcoded for instant load — no runtime fetch needed
+const K12_TEMPLATE_SUBJECTS = {
+    Core: [
+        '21st Century Literature from the Philippines and the World',
+        'Contemporary Philippine Arts from the Regions',
+        'Disaster Readiness and Risk Reduction',
+        'Earth and Life Science*',
+        'Earth Science',
+        'General Mathematics',
+        'Introduction to the Philosophy of the Human Person/Pambungad sa Pilosopiya ng Tao',
+        'Komunikasyon at Pananaliksik sa Wika at Kulturang Pilipino',
+        'Media and Information Literacy',
+        'Oral Communication',
+        'Pagbasa at Pagsusuri ng Iba\'t Ibang Teksto Tungo sa Pananaliksik',
+        'Personal Development/Pansariling Kaunlaran',
+        'Physical Education and Health',
+        'Physical Science*',
+        'Reading and Writing',
+        'Statistics and Probability',
+        'Understanding Culture, Society and Politics',
+    ],
+    Applied: [
+        'Empowerment Technologies',
+        'English for Academic and Professional Purposes',
+        'Entrepreneurship',
+        'Filipino sa Piling Larang',
+        'Inquiries, Investigations and Immersion',
+        'Practical Research 1',
+        'Practical Research 2',
+    ],
+    Specialized: [
+        'Computer Programming (Oracle) NC III',
+    ],
+    Other: [],
+};
+
 function StudentEditor({ data, onChange, onSave }) {
     const [activeTab, setActiveTab] = useState('info');
     const [isPrinting, setIsPrinting] = useState(false);
@@ -138,6 +175,8 @@ function StudentEditor({ data, onChange, onSave }) {
     }, [data, onChange, scheduleAutoSave]);
 
     const updateSub = useCallback((semKey, idx, field, value) => {
+        if (!data[semKey] || !data[semKey].subjects[idx]) return;
+
         // Performance optimization: don't update if value hasn't changed
         if (data[semKey].subjects[idx][field] === value) return;
 
@@ -147,18 +186,18 @@ function StudentEditor({ data, onChange, onSave }) {
 
         // Basic Validation: Clamping grades 0-100
         let processedValue = value;
-        if (nextIdx !== idx || nextField !== field) {
-            // Find the element and focus it
-            setTimeout(() => {
-                const sel = `[data-sem="${semKey}"] [data-idx="${nextIdx}"][data-field="${nextField}"]`;
-                const el = document.querySelector(sel);
-                if (el) {
-                    el.focus();
-                    if (el.tagName === 'INPUT') el.select();
-                }
-            }, 0);
+        if (['q1', 'q2', 'final'].includes(field) && value !== '') {
+            const num = parseInt(value, 10);
+            if (!isNaN(num)) {
+                if (num > 100) processedValue = '100';
+                if (num < 0) processedValue = '0';
+            }
         }
-    }, [data]);
+
+        newData[semKey].subjects[idx] = { ...newData[semKey].subjects[idx], [field]: processedValue };
+        onChange(newData);
+        scheduleAutoSave(newData);
+    }, [data, onChange, scheduleAutoSave]);
 
     const updateRem = useCallback((semKey, field, value) => {
         const newData = { ...data };
@@ -218,51 +257,32 @@ function StudentEditor({ data, onChange, onSave }) {
 
     // ── Utility Helpers ──
 
-    const loadTemplateSubjects = useCallback(async () => {
+    const loadTemplateSubjects = useCallback(() => {
         if ((data.annex || []).some(a => a.subject && a.subject.trim() !== '')) {
             if (!window.confirm('This will overwrite your current Annex Master List with the default K-12 subjects. Continue?')) return;
         }
-        try {
-            const res = await fetch('/form137-Helper_IMPORTANT__.json');
-            if (!res.ok) throw new Error('Helper file not found');
-            const rows = await res.json();
 
-            // Column structure: [index, bool, Core, Applied, Specialized, Other, ...]
-            const core = [], applied = [], specialized = [], other = [];
+        const core = K12_TEMPLATE_SUBJECTS.Core || [];
+        const applied = K12_TEMPLATE_SUBJECTS.Applied || [];
+        const specialized = K12_TEMPLATE_SUBJECTS.Specialized || [];
+        const other = K12_TEMPLATE_SUBJECTS.Other || [];
 
-            // Skip the first 3 header rows
-            rows.slice(3).forEach(row => {
-                if (!Array.isArray(row)) return;
-                const coreVal = row[2];
-                const appliedVal = row[3];
-                const specializedVal = row[4];
-                const otherVal = row[5];
-                if (coreVal && typeof coreVal === 'string' && coreVal.trim() !== '') core.push(coreVal.trim());
-                if (appliedVal && typeof appliedVal === 'string' && appliedVal.trim() !== '') applied.push(appliedVal.trim());
-                if (specializedVal && typeof specializedVal === 'string' && specializedVal.trim() !== '' && specializedVal !== 'PlaceHolder') specialized.push(specializedVal.trim());
-                if (otherVal && typeof otherVal === 'string' && otherVal.trim() !== '' && otherVal !== 'PlaceHolder') other.push(otherVal.trim());
-            });
+        const newAnnex = Array(36).fill(null).map((_, i) => {
+            let type = 'Other';
+            if (i < 15) type = 'Core';
+            else if (i < 22) type = 'Applied';
+            else if (i < 31) type = 'Specialized';
+            return { type, subject: '', active: true };
+        });
 
-            const newAnnex = Array(36).fill(null).map((_, i) => {
-                let type = 'Other';
-                if (i < 15) type = 'Core';
-                else if (i < 22) type = 'Applied';
-                else if (i < 31) type = 'Specialized';
-                return { type, subject: '', active: true };
-            });
+        core.forEach((s, i) => { if (i < 15) newAnnex[i] = { ...newAnnex[i], subject: s }; });
+        applied.forEach((s, i) => { if (i < 7) newAnnex[15 + i] = { ...newAnnex[15 + i], subject: s }; });
+        specialized.forEach((s, i) => { if (i < 9) newAnnex[22 + i] = { ...newAnnex[22 + i], subject: s }; });
+        other.forEach((s, i) => { if (i < 5) newAnnex[31 + i] = { ...newAnnex[31 + i], subject: s }; });
 
-            core.forEach((s, i) => { if (i < 15) newAnnex[i] = { ...newAnnex[i], subject: s }; });
-            applied.forEach((s, i) => { if (i < 7) newAnnex[15 + i] = { ...newAnnex[15 + i], subject: s }; });
-            specialized.forEach((s, i) => { if (i < 9) newAnnex[22 + i] = { ...newAnnex[22 + i], subject: s }; });
-            other.forEach((s, i) => { if (i < 5) newAnnex[31 + i] = { ...newAnnex[31 + i], subject: s }; });
-
-            const newData = { ...data, annex: newAnnex };
-            onChange(newData);
-            scheduleAutoSave(newData);
-        } catch (e) {
-            console.error('Failed to load template subjects:', e);
-            alert('Could not load template subjects. Make sure you have a valid template file.');
-        }
+        const newData = { ...data, annex: newAnnex };
+        onChange(newData);
+        scheduleAutoSave(newData);
     }, [data, onChange, scheduleAutoSave]);
 
     const clearGrades = useCallback((semKey) => {
