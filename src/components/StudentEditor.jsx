@@ -544,10 +544,10 @@ function StudentEditor({ data, onChange, onSave }) {
                     <h3><span className="section-icon"><BookIcon /></span> {semLabel} — Scholastic Record</h3>
 
                     {/* Type-filtered datalists — one per subject type */}
-                    {['Core', 'Applied', 'Specialized', 'Other'].map(type => (
+                    {['Core', 'Applied', 'Specialized', 'Other', 'All'].map(type => (
                         <datalist key={type} id={`annex-subjects-${type.toLowerCase()}`}>
                             {(data.annex || [])
-                                .filter(a => a.active && a.type === type && a.subject && a.subject.trim() !== '')
+                                .filter(a => a.active && (type === 'All' || a.type === type) && a.subject && a.subject.trim() !== '')
                                 .map((a, idx) => (
                                     <option key={idx} value={a.subject} />
                                 ))}
@@ -592,7 +592,7 @@ function StudentEditor({ data, onChange, onSave }) {
                                                 placeholder="Subject name"
                                                 data-idx={i}
                                                 data-field="subject"
-                                                list={s.type ? `annex-subjects-${s.type.toLowerCase()}` : undefined}
+                                                list={s.type ? `annex-subjects-${s.type.toLowerCase()}` : 'annex-subjects-all'}
                                             />
                                         </td>
                                         <td>
@@ -722,7 +722,7 @@ function StudentEditor({ data, onChange, onSave }) {
                                                     value={rs.subject}
                                                     onChange={(e) => updateRemSub(semKey, ri, 'subject', e.target.value)}
                                                     placeholder="Subject name"
-                                                    list={rs.type ? `annex-subjects-${rs.type.toLowerCase()}` : undefined}
+                                                    list={rs.type ? `annex-subjects-${rs.type.toLowerCase()}` : 'annex-subjects-all'}
                                                 />
                                             </td>
                                             <td><input className="grade-cell" value={rs.semGrade} onChange={(e) => updateRemSub(semKey, ri, 'semGrade', e.target.value)} placeholder="—" /></td>
