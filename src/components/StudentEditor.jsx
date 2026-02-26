@@ -207,7 +207,7 @@ function StudentEditor({ data, onChange, onSave }) {
                 ...Array.from({ length: 15 }, () => ({ type: 'Core', subject: '', q1: '', q2: '', final: '', action: '' })),
                 ...Array.from({ length: 7 }, () => ({ type: 'Applied', subject: '', q1: '', q2: '', final: '', action: '' })),
                 ...Array.from({ length: 9 }, () => ({ type: 'Specialized', subject: '', q1: '', q2: '', final: '', action: '' })),
-                ...Array.from({ length: 4 }, () => ({ type: 'Other', subject: '', q1: '', q2: '', final: '', action: '' }))
+                ...Array.from({ length: 5 }, () => ({ type: 'Other', subject: '', q1: '', q2: '', final: '', action: '' }))
             ];
         }
         newData.annex = [...newData.annex];
@@ -431,15 +431,21 @@ function StudentEditor({ data, onChange, onSave }) {
 
     // ── Handlers for Print ──
     const handlePrint = async () => {
+        // Safe check for Electron environment
+        const renderer = window.ipcRenderer || (window.electron && window.electron.ipcRenderer);
+
+        if (!renderer) {
+            alert('Excel Printing is only available in the Desktop App.\n\nFor the web version, please use the browser print function or download the desktop app.');
+            return;
+        }
+
         setIsPrinting(true);
-        // Small delay to let React render the overlay
         setTimeout(async () => {
             try {
-                const result = await ipcRenderer.invoke('print-excel-form', data);
+                const result = await renderer.invoke('print-excel-form', data);
                 if (!result.success) {
                     alert('Failed to generate Excel file: ' + result.error);
                 }
-                // Success: File opens automatically in Excel
             } catch (e) {
                 alert('Error printing: ' + e.message);
             }
@@ -1039,9 +1045,9 @@ function StudentEditor({ data, onChange, onSave }) {
             other.forEach((s, i) => { if (i < 5) newAnnex[31 + i] = { subject: s.subject, q1: s.q1, q2: s.q2, final: s.final, action: s.action }; });
 
             newData.annex = newAnnex;
-            setData(newData);
-            setHasUnsavedChanges(true);
-            alert('Annex Master List synchronized from semester subjects!');
+            onChange(newData);
+            scheduleAutoSave(newData);
+            // Removed alert for smoother UX
         };
 
         const annexData = data.annex || [];
@@ -1060,8 +1066,8 @@ function StudentEditor({ data, onChange, onSave }) {
                         <h3 className="sem-title">{label}</h3>
                     </div>
                 </div>
-                <div className="table-wrapper">
-                    <table className="grade-table" data-sem="annex">
+                <div className="subjects-table-wrap">
+                    <table className="subjects-table" data-sem="annex">
                         <thead>
                             <tr>
                                 <th style={{ width: '400px' }}>Subject Name</th>
@@ -1120,16 +1126,44 @@ function StudentEditor({ data, onChange, onSave }) {
 
         return (
             <div className="page-view-group">
-                <div className="info-banner" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <SearchIcon />
-                        <div><strong>Annex Master List:</strong> Enter all subjects and grades here to synchronize them with the Excel Annex sheet.</div>
+                <div className="info-banner" style={{
+                    background: 'rgba(59, 130, 246, 0.05)',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                    backdropFilter: 'blur(10px)',
+                    color: '#93c5fd',
+                    padding: '16px 20px',
+                    borderRadius: '12px',
+                    marginBottom: '26px',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ background: 'rgba(59, 130, 246, 0.2)', padding: '8px', borderRadius: '8px', display: 'flex' }}>
+                            <SearchIcon />
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: '700', color: '#fff', marginBottom: '2px' }}>Annex Master List</div>
+                            <div style={{ opacity: 0.8, fontSize: '13px' }}>Centrally manage all subjects and grades for the Excel Annex sheet.</div>
+                        </div>
                     </div>
                     <button
-                        className="btn-secondary"
+                        className="btn-primary"
                         onClick={syncAnnexFromSemesters}
-                        style={{ fontSize: '12px', padding: '4px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px' }}
+                        style={{
+                            fontSize: '13px',
+                            padding: '8px 16px',
+                            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}
                     >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
                         Sync from Semesters
                     </button>
                 </div>
