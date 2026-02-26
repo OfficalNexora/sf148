@@ -576,13 +576,16 @@ function StudentEditor({ data, onChange, onSave }) {
                 <div className="editor-section">
                     <h3><span className="section-icon"><BookIcon /></span> {semLabel} — Scholastic Record</h3>
 
-                    <datalist id="annex-subjects">
-                        {(data.annex || [])
-                            .filter(a => a.active && a.subject && a.subject.trim() !== '')
-                            .map((a, idx) => (
-                                <option key={idx} value={a.subject} />
-                            ))}
-                    </datalist>
+                    {/* Type-filtered datalists — one per subject type */}
+                    {['Core', 'Applied', 'Specialized', 'Other'].map(type => (
+                        <datalist key={type} id={`annex-subjects-${type.toLowerCase()}`}>
+                            {(data.annex || [])
+                                .filter(a => a.active && a.type === type && a.subject && a.subject.trim() !== '')
+                                .map((a, idx) => (
+                                    <option key={idx} value={a.subject} />
+                                ))}
+                        </datalist>
+                    ))}
 
                     <div className="subjects-table-wrap" data-sem={semKey} onKeyDown={(e) => handleTableKeyDown(e, semKey)}>
                         <table className="subjects-table">
@@ -622,7 +625,7 @@ function StudentEditor({ data, onChange, onSave }) {
                                                 placeholder="Subject name"
                                                 data-idx={i}
                                                 data-field="subject"
-                                                list="annex-subjects"
+                                                list={s.type ? `annex-subjects-${s.type.toLowerCase()}` : undefined}
                                             />
                                         </td>
                                         <td>
@@ -752,7 +755,7 @@ function StudentEditor({ data, onChange, onSave }) {
                                                     value={rs.subject}
                                                     onChange={(e) => updateRemSub(semKey, ri, 'subject', e.target.value)}
                                                     placeholder="Subject name"
-                                                    list="annex-subjects"
+                                                    list={rs.type ? `annex-subjects-${rs.type.toLowerCase()}` : undefined}
                                                 />
                                             </td>
                                             <td><input className="grade-cell" value={rs.semGrade} onChange={(e) => updateRemSub(semKey, ri, 'semGrade', e.target.value)} placeholder="—" /></td>
