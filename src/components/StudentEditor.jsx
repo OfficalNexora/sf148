@@ -1,9 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { read, utils } from 'xlsx';
 // db service available if needed in future
-import Form137Preview from './Form137Preview';
 import PlaceholderChecker from './PlaceholderChecker';
-import ExcelViewer from './ExcelViewer';
 
 // --- Icons ---
 const UserIcon = () => (
@@ -30,9 +28,7 @@ const TABS = [
     { key: 'eligibility', label: 'Eligibility', icon: <CheckIcon /> },
     { key: 'front', label: 'Front Page (Grade 11)', icon: <BookIcon /> },
     { key: 'back', label: 'Back Page (Grade 12)', icon: <BookIcon /> },
-    { key: 'certification', label: 'Certification', icon: <GradIcon /> },
-    { key: 'excel', label: 'Excel Preview (SF10)', icon: <PrintIcon /> },
-    { key: 'preview', label: 'HTML Print View', icon: <PrintIcon /> },
+    { key: 'certification', label: 'Certification', icon: <GradIcon /> }
 ];
 
 const EMPTY_SUBJECT = { type: '', subject: '', q1: '', q2: '', final: '', action: '' };
@@ -972,7 +968,7 @@ function StudentEditor({ data, onChange, onSave }) {
             );
             case 'certification': return renderCertification();
             case 'excel': return <ExcelViewer studentData={data} onBack={() => setActiveTab('info')} />;
-            case 'preview': return renderPreview();
+            case 'certification': return renderCertification();
             default: return null;
         }
     };
@@ -989,8 +985,23 @@ function StudentEditor({ data, onChange, onSave }) {
                         {tab.icon} {tab.label}
                     </button>
                 ))}
+
+                <div style={{ flex: 1 }}></div>
+
+                <div className="tab-actions" style={{ display: 'flex', gap: '8px', paddingRight: '10px' }}>
+                    <button
+                        className="btn-primary"
+                        style={{ height: '32px', padding: '0 12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', background: '#10b981' }}
+                        onClick={handlePrint}
+                    >
+                        <PrintIcon /> Print to Excel
+                    </button>
+                </div>
             </div>
-            {renderTabContent()}
+
+            <div className="editor-content-area">
+                {renderTabContent()}
+            </div>
 
             {isPrinting && (
                 <div style={{
