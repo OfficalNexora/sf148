@@ -38,6 +38,25 @@ process.on('message', async (msg) => {
                 });
             };
 
+            // --- HELPER: Find subject data across semesters (Dynamic Retrieval) ---
+            const findSubjectData = (subjectName) => {
+                if (!subjectName || subjectName.trim() === '') return null;
+                const search = subjectName.trim().toUpperCase();
+
+                for (let i = 1; i <= 4; i++) {
+                    const sem = data[`semester${i}`];
+                    if (sem && sem.subjects) {
+                        const match = sem.subjects.find(s => s.subject && s.subject.trim().toUpperCase() === search);
+                        if (match) return { q1: match.q1, q2: match.q2, final: match.final, action: match.action };
+                    }
+                    if (sem && sem.remedial && sem.remedial.subjects) {
+                        const match = sem.remedial.subjects.find(s => s.subject && s.subject.trim().toUpperCase() === search);
+                        if (match) return { q1: match.semGrade, q2: match.remedialMark, final: match.recomputedGrade, action: match.action };
+                    }
+                }
+                return null;
+            };
+
             // --- HELPER: Direct Placeholder Replacement ---
             const placeholderMap = {
                 'lname': data.info.lname,
@@ -119,15 +138,18 @@ process.on('message', async (msg) => {
             });
 
             // Dynamic Annex Placeholders (Max 36 rows)
+            // Now retrieves grades from semesters based on the subject name in Annex
             if (data.annex) {
                 data.annex.forEach((subj, i) => {
                     const idx = i + 1;
+                    const retrieved = findSubjectData(subj.subject);
+
                     placeholderMap[`asub_${idx}`] = subj.subject;
                     placeholderMap[`atype_${idx}`] = subj.type;
-                    placeholderMap[`aq1_${idx}`] = subj.q1;
-                    placeholderMap[`aq2_${idx}`] = subj.q2;
-                    placeholderMap[`afin_${idx}`] = subj.final;
-                    placeholderMap[`aact_${idx}`] = subj.action;
+                    placeholderMap[`aq1_${idx}`] = retrieved ? retrieved.q1 : '';
+                    placeholderMap[`aq2_${idx}`] = retrieved ? retrieved.q2 : '';
+                    placeholderMap[`afin_${idx}`] = retrieved ? retrieved.final : '';
+                    placeholderMap[`aact_${idx}`] = retrieved ? retrieved.action : '';
                 });
             }
 
