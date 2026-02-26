@@ -1103,46 +1103,52 @@ function StudentEditor({ data, onChange, onSave }) {
 
         return (
             <div className="page-view-group">
-                <div className="info-banner" style={{
-                    background: 'rgba(59, 130, 246, 0.05)',
-                    border: '1px solid rgba(59, 130, 246, 0.2)',
-                    backdropFilter: 'blur(10px)',
-                    color: '#93c5fd',
-                    padding: '16px 20px',
-                    borderRadius: '12px',
-                    marginBottom: '26px',
-                    fontSize: '14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
                     gap: '12px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    marginBottom: '26px',
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ background: 'rgba(59, 130, 246, 0.2)', padding: '8px', borderRadius: '8px', display: 'flex' }}>
-                            <SearchIcon />
+                    <div style={{
+                        background: 'rgba(59, 130, 246, 0.05)',
+                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                        backdropFilter: 'blur(10px)',
+                        color: '#93c5fd',
+                        padding: '16px 20px',
+                        borderRadius: '12px',
+                        fontSize: '13px',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '12px',
+                    }}>
+                        <div style={{ background: 'rgba(59, 130, 246, 0.2)', padding: '8px', borderRadius: '8px', display: 'flex', flexShrink: 0 }}>
+                            <span style={{ fontSize: '18px', lineHeight: 1 }}>①</span>
                         </div>
                         <div>
-                            <div style={{ fontWeight: '700', color: '#fff', marginBottom: '2px' }}>Annex Master List</div>
-                            <div style={{ opacity: 0.8, fontSize: '13px' }}>Centrally manage all subjects and grades for the Excel Annex sheet.</div>
+                            <div style={{ fontWeight: '700', color: '#fff', marginBottom: '4px' }}>Define Subjects Here First</div>
+                            <div style={{ opacity: 0.8, lineHeight: 1.5 }}>Type all your subjects in this Master List. Check the box to make them appear in the dropdown when entering grades in the semester tabs.</div>
                         </div>
                     </div>
-                    <button
-                        className="btn-primary"
-                        onClick={syncAnnexFromSemesters}
-                        style={{
-                            fontSize: '13px',
-                            padding: '8px 16px',
-                            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                            border: 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                        }}
-                    >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
-                        Sync from Semesters
-                    </button>
+                    <div style={{
+                        background: 'rgba(16, 185, 129, 0.05)',
+                        border: '1px solid rgba(16, 185, 129, 0.2)',
+                        backdropFilter: 'blur(10px)',
+                        color: '#6ee7b7',
+                        padding: '16px 20px',
+                        borderRadius: '12px',
+                        fontSize: '13px',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '12px',
+                    }}>
+                        <div style={{ background: 'rgba(16, 185, 129, 0.2)', padding: '8px', borderRadius: '8px', display: 'flex', flexShrink: 0 }}>
+                            <span style={{ fontSize: '18px', lineHeight: 1 }}>②</span>
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: '700', color: '#fff', marginBottom: '4px' }}>Then Enter Grades in Semester Tabs</div>
+                            <div style={{ opacity: 0.8, lineHeight: 1.5 }}>Go to Grade 11 / Grade 12 tabs. Click the Subject field and pick from your list. Grades entered there will auto-fill the Excel Annex sheet on export.</div>
+                        </div>
+                    </div>
                 </div>
                 <div className="annex-container">
                     {renderAnnexSection('CORE SUBJECTS', core, 0)}
