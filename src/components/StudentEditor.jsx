@@ -1025,29 +1025,46 @@ function StudentEditor({ data, onChange, onSave }) {
     const renderAnnex = () => {
         const syncAnnexFromSemesters = () => {
             const newData = { ...data };
-            const allSubjects = [
-                ...(newData.semester1.subjects || []),
-                ...(newData.semester2.subjects || []),
-                ...(newData.semester3.subjects || []),
-                ...(newData.semester4.subjects || [])
-            ].filter(s => s.subject && s.subject.trim() !== '');
+            const allSubjects = [];
+
+            // Collect all subjects from all 4 semesters
+            [1, 2, 3, 4].forEach(n => {
+                const semData = newData[`semester${n}`];
+                if (semData && semData.subjects) {
+                    semData.subjects.forEach(s => {
+                        if (s.subject && s.subject.trim() !== '') {
+                            allSubjects.push({ ...s });
+                        }
+                    });
+                }
+            });
+
+            if (allSubjects.length === 0) {
+                alert('No subjects found in any semester to sync from.');
+                return;
+            }
 
             const core = allSubjects.filter(s => s.type === 'Core');
             const applied = allSubjects.filter(s => s.type === 'Applied');
             const specialized = allSubjects.filter(s => s.type === 'Specialized');
             const other = allSubjects.filter(s => s.type !== 'Core' && s.type !== 'Applied' && s.type !== 'Specialized');
 
-            const newAnnex = Array(36).fill(null).map(() => ({ subject: '', q1: '', q2: '', final: '', action: '' }));
+            const newAnnex = Array(36).fill(null).map((_, i) => {
+                let type = 'Other';
+                if (i < 15) type = 'Core';
+                else if (i < 22) type = 'Applied';
+                else if (i < 31) type = 'Specialized';
+                return { type, subject: '', q1: '', q2: '', final: '', action: '' };
+            });
 
-            core.forEach((s, i) => { if (i < 15) newAnnex[i] = { subject: s.subject, q1: s.q1, q2: s.q2, final: s.final, action: s.action }; });
-            applied.forEach((s, i) => { if (i < 7) newAnnex[15 + i] = { subject: s.subject, q1: s.q1, q2: s.q2, final: s.final, action: s.action }; });
-            specialized.forEach((s, i) => { if (i < 9) newAnnex[22 + i] = { subject: s.subject, q1: s.q1, q2: s.q2, final: s.final, action: s.action }; });
-            other.forEach((s, i) => { if (i < 5) newAnnex[31 + i] = { subject: s.subject, q1: s.q1, q2: s.q2, final: s.final, action: s.action }; });
+            core.forEach((s, i) => { if (i < 15) newAnnex[i] = { ...newAnnex[i], subject: s.subject, q1: s.q1, q2: s.q2, final: s.final, action: s.action }; });
+            applied.forEach((s, i) => { if (i < 7) newAnnex[15 + i] = { ...newAnnex[15 + i], subject: s.subject, q1: s.q1, q2: s.q2, final: s.final, action: s.action }; });
+            specialized.forEach((s, i) => { if (i < 9) newAnnex[22 + i] = { ...newAnnex[22 + i], subject: s.subject, q1: s.q1, q2: s.q2, final: s.final, action: s.action }; });
+            other.forEach((s, i) => { if (i < 5) newAnnex[31 + i] = { ...newAnnex[31 + i], subject: s.subject, q1: s.q1, q2: s.q2, final: s.final, action: s.action }; });
 
             newData.annex = newAnnex;
             onChange(newData);
             scheduleAutoSave(newData);
-            // Removed alert for smoother UX
         };
 
         const annexData = data.annex || [];
@@ -1059,67 +1076,57 @@ function StudentEditor({ data, onChange, onSave }) {
         const other = annexData.filter((_, i) => i >= 31);
 
         const renderAnnexSection = (label, list, offset) => (
-            <div className="semester-block board" style={{ marginBottom: '20px' }}>
-                <div className="sem-header">
-                    <div className="sem-title-area">
-                        <div className="sem-icon"><SearchIcon /></div>
-                        <h3 className="sem-title">{label}</h3>
-                    </div>
+            <div className="annex-section" style={{ marginBottom: '24px' }}>
+                <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '4px', height: '18px', background: '#3b82f6', borderRadius: '4px' }}></div>
+                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#e2e8f0', letterSpacing: '0.5px' }}>{label}</h3>
                 </div>
-                <div className="subjects-table-wrap">
-                    <table className="subjects-table" data-sem="annex">
-                        <thead>
-                            <tr>
-                                <th style={{ width: '400px' }}>Subject Name</th>
-                                <th style={{ width: '60px' }}>Q1</th>
-                                <th style={{ width: '60px' }}>Q2</th>
-                                <th style={{ width: '80px' }}>Final</th>
-                                <th style={{ width: '100px' }}>Action Taken</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {list.map((subj, localIdx) => {
-                                const i = offset + localIdx;
-                                return (
-                                    <tr key={i}>
-                                        <td>
-                                            <input
-                                                className="grade-cell"
-                                                data-idx={i} data-field="subject"
-                                                value={subj.subject || ''}
-                                                onInput={(e) => updateAnnexSub(i, 'subject', e.target.value)}
-                                                onKeyDown={(e) => handleTableKeyDown(e, 'annex')}
-                                            />
-                                        </td>
-                                        <td>
-                                            <input
-                                                className="grade-cell center"
-                                                data-idx={i} data-field="q1"
-                                                value={subj.q1 || ''}
-                                                onInput={(e) => updateAnnexSub(i, 'q1', e.target.value)}
-                                                onKeyDown={(e) => handleTableKeyDown(e, 'annex')}
-                                                maxLength="3"
-                                            />
-                                        </td>
-                                        <td>
-                                            <input
-                                                className="grade-cell center"
-                                                data-idx={i} data-field="q2"
-                                                value={subj.q2 || ''}
-                                                onInput={(e) => updateAnnexSub(i, 'q2', e.target.value)}
-                                                onKeyDown={(e) => handleTableKeyDown(e, 'annex')}
-                                                maxLength="3"
-                                            />
-                                        </td>
-                                        <td className="center grade-final">{subj.final || ''}</td>
-                                        <td className={`center grade-action ${subj.action === 'PASSED' ? 'action-passed' : subj.action === 'FAILED' ? 'action-failed' : ''}`}>
-                                            {subj.action || ''}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+
+                <div className="annex-grid">
+                    <div className="annex-header-row">
+                        <div>Subject Name</div>
+                        <div style={{ textAlign: 'center' }}>Q1</div>
+                        <div style={{ textAlign: 'center' }}>Q2</div>
+                        <div style={{ textAlign: 'center' }}>Final</div>
+                        <div style={{ textAlign: 'center' }}>Action</div>
+                    </div>
+
+                    {list.map((subj, localIdx) => {
+                        const i = offset + localIdx;
+                        return (
+                            <div key={i} className="annex-row">
+                                <input
+                                    placeholder="Subject name"
+                                    value={subj.subject || ''}
+                                    onChange={(e) => updateAnnexSub(i, 'subject', e.target.value)}
+                                    onKeyDown={(e) => handleTableKeyDown(e, 'annex')}
+                                    data-idx={i} data-field="subject"
+                                />
+                                <input
+                                    className="center"
+                                    data-idx={i} data-field="q1"
+                                    value={subj.q1 || ''}
+                                    onInput={(e) => updateAnnexSub(i, 'q1', e.target.value)}
+                                    onKeyDown={(e) => handleTableKeyDown(e, 'annex')}
+                                    maxLength="3"
+                                    placeholder="-"
+                                />
+                                <input
+                                    className="center"
+                                    data-idx={i} data-field="q2"
+                                    value={subj.q2 || ''}
+                                    onInput={(e) => updateAnnexSub(i, 'q2', e.target.value)}
+                                    onKeyDown={(e) => handleTableKeyDown(e, 'annex')}
+                                    maxLength="3"
+                                    placeholder="-"
+                                />
+                                <div className="annex-val">{subj.final || '-'}</div>
+                                <div className={`annex-action ${subj.action === 'PASSED' ? 'action-passed' : subj.action === 'FAILED' ? 'action-failed' : ''}`} style={{ fontSize: '11px', opacity: subj.action ? 1 : 0.3 }}>
+                                    {subj.action || 'P/F'}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         );
@@ -1167,10 +1174,12 @@ function StudentEditor({ data, onChange, onSave }) {
                         Sync from Semesters
                     </button>
                 </div>
-                {renderAnnexSection('CORE SUBJECTS', core, 0)}
-                {renderAnnexSection('APPLIED SUBJECTS', applied, 15)}
-                {renderAnnexSection('SPECIALIZED SUBJECTS', specialized, 22)}
-                {renderAnnexSection('OTHER SUBJECTS', other, 31)}
+                <div className="annex-container">
+                    {renderAnnexSection('CORE SUBJECTS', core, 0)}
+                    {renderAnnexSection('APPLIED SUBJECTS', applied, 15)}
+                    {renderAnnexSection('SPECIALIZED SUBJECTS', specialized, 22)}
+                    {renderAnnexSection('OTHER SUBJECTS', other, 31)}
+                </div>
             </div>
         );
     };

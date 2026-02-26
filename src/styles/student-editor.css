@@ -376,6 +376,86 @@
     margin-top: 16px;
 }
 
+/* ── Annex Modern Grid ── */
+.annex-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.annex-section {
+    background: rgba(30, 41, 59, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.annex-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.annex-header-row {
+    display: grid;
+    grid-template-columns: 2.5fr 0.8fr 0.8fr 1fr 1.5fr;
+    gap: 12px;
+    padding: 0 16px 10px 16px;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.annex-row {
+    display: grid;
+    grid-template-columns: 2.5fr 0.8fr 0.8fr 1fr 1.5fr;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    transition: all 0.2s ease;
+}
+
+.annex-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+.annex-row input {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #e2e8f0;
+    font-size: 13px;
+    outline: none;
+    transition: all 0.15s ease;
+}
+
+.annex-row input:focus {
+    border-color: #3b82f6;
+    background: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+
+.annex-val {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.annex-action {
+    font-weight: 700;
+    font-size: 12px;
+    text-align: center;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
 /* ── Editor Container ── */
 .student-editor-container {
     width: 100%;
