@@ -6,6 +6,8 @@ dist/
 out/
 release/
 *.exe
+!release/*.ps1
+!release/*.yml
 
 # Environment
 .env
