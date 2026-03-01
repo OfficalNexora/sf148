@@ -78,6 +78,38 @@ function buildSummarySheet(data) {
     return XLSX.utils.aoa_to_sheet(rows);
 }
 
+function fillSemesterInfo(sheet, startRow, semData) {
+    if (!sheet || !semData) return;
+    const r = startRow - 1;
+    // School
+    sheet[XLSX.utils.encode_cell({ r, c: 4 })] = { t: 's', v: normalize(semData.school) };
+    // School ID
+    sheet[XLSX.utils.encode_cell({ r, c: 28 })] = { t: 's', v: normalize(semData.schoolId) };
+    // Grade Level
+    sheet[XLSX.utils.encode_cell({ r, c: 41 })] = { t: 's', v: normalize(semData.gradeLevel) };
+    // SY
+    sheet[XLSX.utils.encode_cell({ r, c: 52 })] = { t: 's', v: normalize(semData.sy) };
+    // SEM
+    sheet[XLSX.utils.encode_cell({ r, c: 62 })] = { t: 's', v: normalize(semData.semester) };
+    // Track/Strand
+    sheet[XLSX.utils.encode_cell({ r: r + 2, c: 6 })] = { t: 's', v: normalize(semData.trackStrand) };
+    // Section
+    sheet[XLSX.utils.encode_cell({ r: r + 2, c: 42 })] = { t: 's', v: normalize(semData.section) };
+}
+
+function fillSemesterSubjects(sheet, startRow, subjects) {
+    if (!sheet || !subjects || !Array.isArray(subjects)) return;
+    subjects.forEach((subj, idx) => {
+        const r = startRow - 1 + idx;
+        sheet[XLSX.utils.encode_cell({ r, c: 0 })] = { t: 's', v: normalize(subj.type) };
+        sheet[XLSX.utils.encode_cell({ r, c: 8 })] = { t: 's', v: normalize(subj.subject) };
+        sheet[XLSX.utils.encode_cell({ r, c: 45 })] = { t: 's', v: normalize(subj.q1) };
+        sheet[XLSX.utils.encode_cell({ r, c: 50 })] = { t: 's', v: normalize(subj.q2) };
+        sheet[XLSX.utils.encode_cell({ r, c: 55 })] = { t: 's', v: normalize(subj.final) };
+        sheet[XLSX.utils.encode_cell({ r, c: 60 })] = { t: 's', v: normalize(subj.action) };
+    });
+}
+
 export async function generateExcelForm(data) {
     try {
         const response = await fetch('/Form 137-SHS-BLANK.xlsx');
@@ -111,6 +143,11 @@ export async function generateExcelForm(data) {
                 writeByLabel(front, 'DATE OF GRADUATION', data.eligibility?.gradDate, 3);
                 writeByLabel(front, 'NAME OF SCHOOL', data.eligibility?.schoolName, 2);
                 writeByLabel(front, 'SCHOOL ADDRESS', data.eligibility?.schoolAddress, 1);
+
+                fillSemesterInfo(front, 23, data.semester1);
+                fillSemesterSubjects(front, 28, data.semester1?.subjects);
+                fillSemesterInfo(front, 66, data.semester2);
+                fillSemesterSubjects(front, 71, data.semester2?.subjects);
             }
 
             if (back) {
@@ -118,6 +155,11 @@ export async function generateExcelForm(data) {
                 writeByLabel(back, 'SHS GENERAL AVERAGE', data.certification?.genAve, 3);
                 writeByLabel(back, 'DATE OF GRADUATION', data.certification?.gradDate, 2, 2);
                 writeByLabel(back, 'NAME OF SCHOOL', data.certification?.schoolHead, 2);
+
+                fillSemesterInfo(back, 4, data.semester3);
+                fillSemesterSubjects(back, 11, data.semester3?.subjects);
+                fillSemesterInfo(back, 46, data.semester4);
+                fillSemesterSubjects(back, 51, data.semester4?.subjects);
             }
 
             const filename = `Form137_${(data.info?.lname || 'Student').replace(/[^a-z0-9]/gi, '_')}.xlsx`;

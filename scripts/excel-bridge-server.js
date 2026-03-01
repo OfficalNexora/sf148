@@ -10,7 +10,18 @@ const PORT = Number(process.env.BRIDGE_PORT || 8787);
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
 const API_KEY = process.env.BRIDGE_API_KEY || '';
 const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
-const TEMPLATE_PATH = process.env.BRIDGE_TEMPLATE_PATH || path.join(process.cwd(), 'public', 'Form 137-SHS-BLANK.xlsx');
+
+// Priority: 1. ENV, 2. Current Folder (for portable EXE), 3. public/ folder
+const TEMPLATE_NAME = 'Form 137-SHS-BLANK.xlsx';
+const POSSIBLE_PATHS = [
+    process.env.BRIDGE_TEMPLATE_PATH,
+    path.join(process.cwd(), TEMPLATE_NAME),
+    path.join(__dirname, TEMPLATE_NAME),
+    path.join(process.cwd(), 'public', TEMPLATE_NAME),
+    path.join(__dirname, '..', 'public', TEMPLATE_NAME)
+];
+const TEMPLATE_PATH = POSSIBLE_PATHS.find(p => p && fs.existsSync(p)) || POSSIBLE_PATHS[1];
+
 const OUTPUT_DIR = process.env.BRIDGE_OUTPUT_DIR || path.join(os.tmpdir(), 'form137-exports');
 
 if (!fs.existsSync(OUTPUT_DIR)) {
@@ -53,10 +64,64 @@ function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 2
             if (text.includes(search)) {
                 const target = XLSX.utils.encode_cell({ r: r + offsetRow, c: c + offsetCol });
                 ws[target] = { t: 's', v: normalize(value) };
-                return;
+                return true; // Match found
             }
         }
     }
+    return false;
+}
+
+function fillSemesterInfo(sheet, startRow, semData) {
+    if (!sheet || !semData) return;
+
+    // Headers are at fixed relative positions from the "SCHOOL:" label
+    // or we can just hope writeByLabel finds them unique within the sheet if we restrict range.
+    // For safety, we use the specific rows we found.
+
+    // Sem 1 (FRONT): Row 23
+    // Sem 2 (FRONT): Row 66
+    // Sem 3 (BACK): Row 4
+    // Sem 4 (BACK): Row 46
+
+    const r = startRow - 1; // 0-indexed
+
+    // School
+    sheet[XLSX.utils.encode_cell({ r, c: 4 })] = { t: 's', v: normalize(semData.school) };
+    // School ID
+    sheet[XLSX.utils.encode_cell({ r, c: 28 })] = { t: 's', v: normalize(semData.schoolId) };
+    // Grade Level
+    sheet[XLSX.utils.encode_cell({ r, c: 41 })] = { t: 's', v: normalize(semData.gradeLevel) };
+    // SY
+    sheet[XLSX.utils.encode_cell({ r, c: 52 })] = { t: 's', v: normalize(semData.sy) };
+    // SEM
+    sheet[XLSX.utils.encode_cell({ r, c: 62 })] = { t: 's', v: normalize(semData.semester) };
+
+    // Track/Strand (2 rows down)
+    sheet[XLSX.utils.encode_cell({ r: r + 2, c: 6 })] = { t: 's', v: normalize(semData.trackStrand) };
+    // Section
+    sheet[XLSX.utils.encode_cell({ r: r + 2, c: 42 })] = { t: 's', v: normalize(semData.section) };
+}
+
+function fillSemesterSubjects(sheet, startRow, subjects) {
+    if (!sheet || !subjects || !Array.isArray(subjects)) return;
+
+    subjects.forEach((subj, idx) => {
+        const r = startRow - 1 + idx;
+        if (r > 1000) return; // Safety
+
+        // Col A (0): Type (CORE/APPLIED/SPECIALIZED)
+        sheet[XLSX.utils.encode_cell({ r, c: 0 })] = { t: 's', v: normalize(subj.type) };
+        // Col I (8): Subject Name
+        sheet[XLSX.utils.encode_cell({ r, c: 8 })] = { t: 's', v: normalize(subj.subject) };
+        // Col AT (45): Q1 / 1st
+        sheet[XLSX.utils.encode_cell({ r, c: 45 })] = { t: 's', v: normalize(subj.q1) };
+        // Col AY (50): Q2 / 2nd
+        sheet[XLSX.utils.encode_cell({ r, c: 50 })] = { t: 's', v: normalize(subj.q2) };
+        // Col BD (55): Final
+        sheet[XLSX.utils.encode_cell({ r, c: 55 })] = { t: 's', v: normalize(subj.final) };
+        // Col BI (60): Action
+        sheet[XLSX.utils.encode_cell({ r, c: 60 })] = { t: 's', v: normalize(subj.action) };
+    });
 }
 
 function createSummaryWorkbook(data) {
@@ -137,6 +202,13 @@ function createWorkbookFromTemplate(data) {
         writeByLabel(front, 'DATE OF GRADUATION', data.eligibility?.gradDate, 3);
         writeByLabel(front, 'NAME OF SCHOOL', data.eligibility?.schoolName, 2);
         writeByLabel(front, 'SCHOOL ADDRESS', data.eligibility?.schoolAddress, 1);
+
+        // Fill Semester 1 & 2 (Grade 11)
+        fillSemesterInfo(front, 23, data.semester1);
+        fillSemesterSubjects(front, 28, data.semester1?.subjects);
+
+        fillSemesterInfo(front, 66, data.semester2);
+        fillSemesterSubjects(front, 71, data.semester2?.subjects);
     }
 
     if (back) {
@@ -144,6 +216,13 @@ function createWorkbookFromTemplate(data) {
         writeByLabel(back, 'SHS GENERAL AVERAGE', data.certification?.genAve, 3);
         writeByLabel(back, 'DATE OF GRADUATION', data.certification?.gradDate, 2, 2);
         writeByLabel(back, 'NAME OF SCHOOL', data.certification?.schoolHead, 2);
+
+        // Fill Semester 3 & 4 (Grade 12)
+        fillSemesterInfo(back, 4, data.semester3);
+        fillSemesterSubjects(back, 11, data.semester3?.subjects);
+
+        fillSemesterInfo(back, 46, data.semester4);
+        fillSemesterSubjects(back, 51, data.semester4?.subjects);
     }
 
     return wb;
@@ -319,8 +398,25 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-    console.log(`Excel bridge listening on http://${HOST}:${PORT}`);
-    console.log(`Template path: ${TEMPLATE_PATH}`);
-    console.log(`Output dir: ${OUTPUT_DIR}`);
-    if (API_KEY) console.log('API key auth: enabled');
+    process.stdout.write('\x1Bc'); // Clear console
+    console.log('================================================');
+    console.log('       SF10 EXCEL BRIDGE SERVER RUNNING         ');
+    console.log('================================================');
+    console.log(`Status:  Online`);
+    console.log(`Address: http://${HOST}:${PORT}`);
+    console.log(`URL:     ${HOST === '127.0.0.1' ? 'Local' : HOST}`);
+    console.log(`Auth:    ${API_KEY ? 'Enabled' : 'Disabled'}`);
+    console.log('------------------------------------------------');
+
+    if (fs.existsSync(TEMPLATE_PATH)) {
+        console.log(`Template: [FOUND] ${path.basename(TEMPLATE_PATH)}`);
+    } else {
+        console.log(`Template: [MISSING] Fallback to simple list mode.`);
+        console.warn(`Looking for: ${TEMPLATE_NAME}`);
+    }
+
+    console.log(`Outputs:  ${OUTPUT_DIR}`);
+    console.log('================================================');
+    console.log('Keep this window open while using the website.');
+    console.log('Press Ctrl+C to close.');
 });
