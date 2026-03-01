@@ -1,10 +1,10 @@
-(
+param(
     [string]$AuthToken = "3AKzmN3su2n50gfv8qmMf8ZqpHj_275QXanCMyU8sVv46EYVp"
 )
 
 $ErrorActionPreference = "Stop"
 $scriptDir = $PSScriptRoot
-$ngrokPath = Join-Path $scriptDiparamr "ngrok.exe"
+$ngrokPath = Join-Path $scriptDir "ngrok.exe"
 $configPath = Join-Path $scriptDir "ngrok.yml"
 
 Write-Host "================================================" -ForegroundColor Cyan
