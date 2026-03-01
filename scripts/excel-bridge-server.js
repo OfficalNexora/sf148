@@ -398,7 +398,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-    process.stdout.write('\x1Bc'); // Clear console
     console.log('================================================');
     console.log('       SF10 EXCEL BRIDGE SERVER RUNNING         ');
     console.log('================================================');
