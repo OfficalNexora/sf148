@@ -1,12 +1,12 @@
 function getBridgeBaseUrl() {
-    const fromEnv = (import.meta.env.VITE_EXCEL_BRIDGE_URL || '').trim();
+    const fromEnv = (import.meta.env.EXCEL_BRIDGE_URL || import.meta.env.VITE_EXCEL_BRIDGE_URL || '').trim();
     if (fromEnv) return fromEnv.replace(/\/+$/, '');
     return 'http://127.0.0.1:8787';
 }
 
 export async function openExcelViaBridge(data, options = {}) {
     const baseUrl = getBridgeBaseUrl();
-    const apiKey = (import.meta.env.VITE_EXCEL_BRIDGE_KEY || '').trim();
+    const apiKey = (import.meta.env.EXCEL_BRIDGE_KEY || import.meta.env.VITE_EXCEL_BRIDGE_KEY || '').trim();
     const requestBody = {
         data,
         autoPrint: Boolean(options.autoPrint),
