@@ -15,42 +15,46 @@
         "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
         "electron:build": "vite build && electron-builder"
     },
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "xlsx": "^0.18.5"
-},
-"devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "concurrently": "^9.1.2",
-    "electron": "^39.2.3",
-    "electron-builder": "^25.1.8",
-    "vite": "^6.0.7",
-    "wait-on": "^8.0.2"
-},
-"build": {
-    "appId": "com.deped.form137",
-    "productName": "DepEd Form 137 System",
-    "directories": {
-        "output": "release"
+    "dependencies": {
+        "exceljs": "^4.4.0",
+        "firebase": "^12.9.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "xlsx": "^0.18.5"
     },
-    "files": [
-        "dist/**/*",
-        "electron/**/*",
-        "package.json"
-    ],
-    "win": {
-        "target": "nsis"
+    "devDependencies": {
+        "@vitejs/plugin-react": "^4.3.4",
+        "concurrently": "^9.1.2",
+        "electron": "^39.2.3",
+        "electron-builder": "^25.1.8",
+        "pkg": "^5.8.1",
+        "vite": "^6.0.7",
+        "wait-on": "^8.0.2"
     },
-    "nsis": {
-        "oneClick": false,
-        "allowToChangeInstallationDirectory": true,
-        "createDesktopShortcut": true
-    },
-    "extraResources": [
-        {
-            "from": "./public/Form 137-SHS-BLANK.xlsx",
-            "to": "Form 137-SHS-BLANK.xlsx"
-        }
-    ]
-}
+    "build": {
+        "appId": "com.deped.form137",
+        "productName": "DepEd Form 137 System",
+        "directories": {
+            "output": "release"
+        },
+        "files": [
+            "dist/**/*",
+            "electron/**/*",
+            "package.json"
+        ],
+        "win": {
+            "target": "nsis"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true
+        },
+        "extraResources": [
+            {
+                "from": "./public/Form 137-SHS-BLANK.xlsx",
+                "to": "Form 137-SHS-BLANK.xlsx"
+            }
+        ]
+    }
 }
