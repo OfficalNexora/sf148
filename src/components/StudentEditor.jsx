@@ -464,12 +464,14 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
                         autoPrint: true,
                         openAfterPrint: true
                     });
-                    if (bridgeResult.success) {
-                        if (bridgeResult.warning) {
-                            alert(bridgeResult.warning);
-                        }
+                    if (bridgeResult.success && !bridgeResult.warning) {
+                        // Fully successful bridge print
                         setIsPrinting(false);
                         return;
+                    }
+
+                    if (bridgeResult.warning) {
+                        console.warn('Bridge returned warning, falling back to browser download:', bridgeResult.warning);
                     }
 
                     // Fallback to purely generating and downloading the Excel file in the browser
