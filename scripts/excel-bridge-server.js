@@ -23,9 +23,22 @@ const POSSIBLE_PATHS = [
 const TEMPLATE_PATH = POSSIBLE_PATHS.find(p => p && fs.existsSync(p)) || POSSIBLE_PATHS[1];
 
 const OUTPUT_DIR = process.env.BRIDGE_OUTPUT_DIR || path.join(os.tmpdir(), 'form137-exports');
+const STARTUP_LOG_FILE = path.join(process.cwd(), 'excel-bridge-startup.log');
 
 if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+}
+
+function logToFile(message) {
+    try {
+        fs.appendFileSync(
+            STARTUP_LOG_FILE,
+            `[${new Date().toISOString()}] ${message}\n`,
+            'utf8'
+        );
+    } catch {
+        // Ignore logging errors.
+    }
 }
 
 function setCors(res) {
@@ -395,6 +408,45 @@ const server = http.createServer(async (req, res) => {
         console.error('Bridge error:', err);
         return sendJson(res, 500, { success: false, error: err.message });
     }
+});
+
+function getStartupHint(error) {
+    if (!error || !error.code) return '';
+    if (error.code === 'EADDRINUSE') {
+        return `Port ${PORT} is already in use. Close the app using that port, or start bridge with BRIDGE_PORT=8788.`;
+    }
+    if (error.code === 'EACCES') {
+        return `No permission to bind ${HOST}:${PORT}. Try a non-privileged port like 8787 or 8788.`;
+    }
+    return '';
+}
+
+server.on('error', (error) => {
+    const hint = getStartupHint(error);
+    const detail = `Bridge failed to start on ${HOST}:${PORT} (${error.code || 'UNKNOWN'}): ${error.message}`;
+
+    console.error(detail);
+    if (hint) console.error(hint);
+    console.error(`Log file: ${STARTUP_LOG_FILE}`);
+
+    logToFile(detail);
+    if (hint) logToFile(`Hint: ${hint}`);
+});
+
+process.on('uncaughtException', (error) => {
+    const detail = `Uncaught exception: ${error.stack || error.message}`;
+    console.error(detail);
+    console.error(`Log file: ${STARTUP_LOG_FILE}`);
+    logToFile(detail);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+    const detail = `Unhandled rejection: ${reason && reason.stack ? reason.stack : String(reason)}`;
+    console.error(detail);
+    console.error(`Log file: ${STARTUP_LOG_FILE}`);
+    logToFile(detail);
+    process.exit(1);
 });
 
 server.listen(PORT, HOST, () => {

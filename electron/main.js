@@ -4,21 +4,81 @@ const fs = require('fs');
 const crypto = require('crypto');
 const xlsx = require('xlsx');
 
-// DIRECTORY SETUP - Use parent folder's data directory for continuity
-const DATA_DIR = path.join(__dirname, '..', '..', 'data');
-const RECORDS_DIR = path.join(DATA_DIR, 'records');
-const ASSETS_DIR = path.join(__dirname, '..', 'public', 'assets');
+// Check if we're in development
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-// Ensure directories exist
-[DATA_DIR, RECORDS_DIR].forEach(dir => {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+// Keep runtime data in a user-writable location in packaged builds.
+const DATA_DIR = isDev
+    ? path.join(__dirname, '..', '..', 'data')
+    : path.join(app.getPath('userData'), 'data');
+const RECORDS_DIR = path.join(DATA_DIR, 'records');
+const LEGACY_PACKAGED_DATA_DIR = path.join(process.resourcesPath, 'data');
+const STARTUP_LOG_PATH = path.join(app.getPath('userData'), 'startup-errors.log');
+
+function appendStartupLog(message) {
+    try {
+        const line = `[${new Date().toISOString()}] ${message}\n`;
+        fs.appendFileSync(STARTUP_LOG_PATH, line, 'utf8');
+    } catch {
+        // Ignore logging failures to avoid recursive startup failures.
+    }
+}
+
+function copyDirRecursive(source, destination) {
+    if (!fs.existsSync(source)) return;
+    if (!fs.existsSync(destination)) fs.mkdirSync(destination, { recursive: true });
+
+    const entries = fs.readdirSync(source, { withFileTypes: true });
+    for (const entry of entries) {
+        const sourcePath = path.join(source, entry.name);
+        const destinationPath = path.join(destination, entry.name);
+        if (entry.isDirectory()) {
+            copyDirRecursive(sourcePath, destinationPath);
+        } else if (entry.isFile() && !fs.existsSync(destinationPath)) {
+            fs.copyFileSync(sourcePath, destinationPath);
+        }
+    }
+}
+
+function migrateLegacyPackagedDataIfNeeded() {
+    if (isDev) return;
+    if (!fs.existsSync(LEGACY_PACKAGED_DATA_DIR)) return;
+    if (fs.existsSync(DATA_DIR) && fs.readdirSync(DATA_DIR).length > 0) return;
+    copyDirRecursive(LEGACY_PACKAGED_DATA_DIR, DATA_DIR);
+}
+
+function ensureRuntimeDirectories() {
+    try {
+        migrateLegacyPackagedDataIfNeeded();
+        [DATA_DIR, RECORDS_DIR].forEach(dir => {
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        });
+    } catch (error) {
+        appendStartupLog(`Directory initialization failed: ${error.stack || error.message}`);
+        dialog.showErrorBox(
+            'Startup Error',
+            `Unable to initialize app data folder.\n${error.message}\n\nLog: ${STARTUP_LOG_PATH}`
+        );
+        throw error;
+    }
+}
+
+process.on('uncaughtException', (error) => {
+    appendStartupLog(`Uncaught exception: ${error.stack || error.message}`);
+    dialog.showErrorBox(
+        'Fatal Error',
+        `The app encountered a fatal error and will close.\n${error.message}\n\nLog: ${STARTUP_LOG_PATH}`
+    );
+    app.quit();
+});
+
+process.on('unhandledRejection', (reason) => {
+    const details = reason && reason.stack ? reason.stack : String(reason);
+    appendStartupLog(`Unhandled rejection: ${details}`);
 });
 
 let mainWindow;
 let currentUserRole = null;
-
-// Check if we're in development
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
@@ -48,7 +108,17 @@ function createWindow() {
     });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+    ensureRuntimeDirectories();
+    createWindow();
+}).catch((error) => {
+    appendStartupLog(`App readiness failed: ${error.stack || error.message}`);
+    dialog.showErrorBox(
+        'Startup Error',
+        `App failed during startup.\n${error.message}\n\nLog: ${STARTUP_LOG_PATH}`
+    );
+    app.quit();
+});
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
