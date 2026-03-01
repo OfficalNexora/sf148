@@ -1,13 +1,15 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getFirestore, initializeFirestore } from 'firebase/firestore';
 
+const env = import.meta.env;
+
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyBULMeZfo2gLMFgcyT1TdDQlEnHI5mg6Z4',
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'form137-sync.firebaseapp.com',
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'form137-sync',
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'form137-sync.firebasestorage.app',
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '863019085410',
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:863019085410:web:1096b14b4318acf3282b3b'
+    apiKey: env.FIREBASE_API_KEY || env.VITE_FIREBASE_API_KEY || 'AIzaSyBULMeZfo2gLMFgcyT1TdDQlEnHI5mg6Z4',
+    authDomain: env.FIREBASE_AUTH_DOMAIN || env.VITE_FIREBASE_AUTH_DOMAIN || 'form137-sync.firebaseapp.com',
+    projectId: env.FIREBASE_PROJECT_ID || env.VITE_FIREBASE_PROJECT_ID || 'form137-sync',
+    storageBucket: env.FIREBASE_STORAGE_BUCKET || env.VITE_FIREBASE_STORAGE_BUCKET || 'form137-sync.firebasestorage.app',
+    messagingSenderId: env.FIREBASE_MESSAGING_SENDER_ID || env.VITE_FIREBASE_MESSAGING_SENDER_ID || '863019085410',
+    appId: env.FIREBASE_APP_ID || env.VITE_FIREBASE_APP_ID || '1:863019085410:web:1096b14b4318acf3282b3b'
 };
 
 let appInstance = null;

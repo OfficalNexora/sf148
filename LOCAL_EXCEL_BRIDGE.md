@@ -21,18 +21,56 @@ Default endpoint:
 Set these in Vercel (Project -> Settings -> Environment Variables):
 
 - `VITE_EXCEL_BRIDGE_URL`
-  Example: `http://127.0.0.1:8787`
+  Example: `https://your-tunnel.ngrok-free.app`
 - `VITE_EXCEL_BRIDGE_KEY` (optional but recommended)
 
-If the bridge is reachable, clicking `Download Excel` in web mode will:
+If the bridge is reachable, clicking `Print to Excel` in web mode will:
 
 1. send student data to the bridge,
 2. generate `.xlsx` on your laptop,
-3. open it in desktop Excel.
+3. auto-print to your default printer (Windows bridge host),
+4. open it in desktop Excel.
 
 If bridge call fails, the app falls back to browser download.
 
-## 3) Optional security and CORS on bridge
+## 3) ngrok tunnel (for remote devices)
+
+`127.0.0.1` only works on the same machine.  
+If other devices will use your Vercel app and trigger Excel on your laptop, tunnel your bridge with ngrok.
+
+### One-command helper
+
+```powershell
+npm run bridge:ngrok
+```
+
+Before first run, set ngrok token once:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/setup-ngrok-auth.ps1 `
+  -AuthToken "<YOUR_NGROK_AUTHTOKEN>" `
+  -NgrokPath "C:\form137application\ngrok-bin\ngrok.exe" `
+  -NgrokConfigPath "C:\form137application\form137-react\scripts\ngrok.yml"
+```
+
+Optional params:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-bridge-ngrok.ps1 `
+  -BridgePort 8787 `
+  -VercelOrigin "https://your-app.vercel.app" `
+  -BridgeKey "your-secret-key" `
+  -NgrokPath "C:\path\to\ngrok.exe"
+```
+
+The script will:
+
+1. start the local bridge,
+2. start ngrok,
+3. print the public URL,
+4. print the exact `VITE_EXCEL_BRIDGE_URL` and `VITE_EXCEL_BRIDGE_KEY` values to place in Vercel.
+
+## 4) Optional security and CORS on bridge
 
 You can run the bridge with environment variables:
 

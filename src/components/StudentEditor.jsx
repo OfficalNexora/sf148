@@ -211,7 +211,7 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
     const [showChecker, setShowChecker] = useState(false);
     const [showRawData, setShowRawData] = useState(false);
     const saveTimerRef = useRef(null);
-    const printActionLabel = isDesktopMode ? 'Print to Excel' : 'Download Excel';
+    const printActionLabel = 'Print to Excel';
 
     // Cleanup save timer on unmount
     React.useEffect(() => {
@@ -460,17 +460,25 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
                     // Web Browser Environment (Vercel):
                     // 1) try local bridge server (desktop auto-open), 2) fallback to browser download.
                     const { openExcelViaBridge } = await import('../services/excelBridgeClient');
-                    const bridgeResult = await openExcelViaBridge(data);
+                    const bridgeResult = await openExcelViaBridge(data, {
+                        autoPrint: true,
+                        openAfterPrint: true
+                    });
                     if (bridgeResult.success) {
+                        if (bridgeResult.warning) {
+                            alert(bridgeResult.warning);
+                        }
                         setIsPrinting(false);
                         return;
                     }
 
+                    // Fallback to purely generating and downloading the Excel file in the browser
                     const { generateExcelForm } = await import('../utils/excelGenerator');
                     const result = await generateExcelForm(data);
-                    if (!result.success) {
-                        const bridgeError = bridgeResult.error ? `Bridge: ${bridgeResult.error}` : 'Bridge unavailable';
-                        alert(`Failed to generate Excel file.\n${bridgeError}\nFallback: ${result.error}`);
+                    if (result.success) {
+                        alert('Excel downloaded successfully!\n\nAs you do not have a local Excel app configured, please upload the downloaded file to Google Sheets, Microsoft 365, or another online Excel viewer to open and print it.');
+                    } else {
+                        alert(`Failed to generate Excel file.\nError: ${result.error}`);
                     }
                 }
             } catch (e) {
@@ -1291,7 +1299,7 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
                 }}>
                     <div className="spinner" style={{ marginBottom: '16px', border: '4px solid rgba(255,255,255,0.3)', borderTop: '4px solid white', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite' }}></div>
                     <div style={{ fontSize: '24px', marginBottom: '8px' }}>Processing...</div>
-                    <div style={{ fontSize: '16px', opacity: 0.9 }}>{isDesktopMode ? 'Opening Excel for Printing...' : 'Generating downloadable Excel file...'}</div>
+                    <div style={{ fontSize: '16px', opacity: 0.9 }}>{isDesktopMode ? 'Opening Excel for Printing...' : 'Opening Excel and sending to printer...'}</div>
                 </div>
             )}
             {showChecker && (

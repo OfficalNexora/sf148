@@ -47,6 +47,8 @@ yarn-error.log*
 !src/**/*
 !electron/**/*
 !public/**/*
+!scripts/**/*
+scripts/ngrok.yml
 vite.config.js
 
 # Backup files

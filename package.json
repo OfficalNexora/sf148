@@ -8,6 +8,8 @@
         "build": "vite build",
         "preview": "vite preview",
         "bridge:excel": "node scripts/excel-bridge-server.js",
+        "bridge:ngrok:auth": "powershell -ExecutionPolicy Bypass -File scripts/setup-ngrok-auth.ps1",
+        "bridge:ngrok": "powershell -ExecutionPolicy Bypass -File scripts/start-bridge-ngrok.ps1",
         "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
         "electron:build": "vite build && electron-builder"
     },
