@@ -3,6 +3,7 @@
     "version": "1.0.0",
     "description": "DepEd Form 137 System - React + Electron",
     "main": "electron/main.js",
+    "bin": "scripts/excel-bridge-server.js",
     "scripts": {
         "dev": "vite",
         "build": "vite build",
@@ -10,48 +11,46 @@
         "bridge:excel": "node scripts/excel-bridge-server.js",
         "bridge:ngrok:auth": "powershell -ExecutionPolicy Bypass -File scripts/setup-ngrok-auth.ps1",
         "bridge:ngrok": "powershell -ExecutionPolicy Bypass -File scripts/start-bridge-ngrok.ps1",
+        "build:bridge": "pkg . --targets node18-win-x64 --output release/excel-bridge-server.exe",
         "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
         "electron:build": "vite build && electron-builder"
     },
-    "dependencies": {
-        "exceljs": "^4.4.0",
-        "firebase": "^12.9.0",
-        "react": "^19.0.0",
-        "react-dom": "^19.0.0",
-        "xlsx": "^0.18.5"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "xlsx": "^0.18.5"
+},
+"devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^39.2.3",
+    "electron-builder": "^25.1.8",
+    "vite": "^6.0.7",
+    "wait-on": "^8.0.2"
+},
+"build": {
+    "appId": "com.deped.form137",
+    "productName": "DepEd Form 137 System",
+    "directories": {
+        "output": "release"
     },
-    "devDependencies": {
-        "@vitejs/plugin-react": "^4.3.4",
-        "concurrently": "^9.1.2",
-        "electron": "^39.2.3",
-        "electron-builder": "^25.1.8",
-        "vite": "^6.0.7",
-        "wait-on": "^8.0.2"
+    "files": [
+        "dist/**/*",
+        "electron/**/*",
+        "package.json"
+    ],
+    "win": {
+        "target": "nsis"
     },
-    "build": {
-        "appId": "com.deped.form137",
-        "productName": "DepEd Form 137 System",
-        "directories": {
-            "output": "release"
-        },
-        "files": [
-            "dist/**/*",
-            "electron/**/*",
-            "package.json"
-        ],
-        "win": {
-            "target": "nsis"
-        },
-        "nsis": {
-            "oneClick": false,
-            "allowToChangeInstallationDirectory": true,
-            "createDesktopShortcut": true
-        },
-        "extraResources": [
-            {
-                "from": "./public/Form 137-SHS-BLANK.xlsx",
-                "to": "Form 137-SHS-BLANK.xlsx"
-            }
-        ]
-    }
+    "nsis": {
+        "oneClick": false,
+        "allowToChangeInstallationDirectory": true,
+        "createDesktopShortcut": true
+    },
+    "extraResources": [
+        {
+            "from": "./public/Form 137-SHS-BLANK.xlsx",
+            "to": "Form 137-SHS-BLANK.xlsx"
+        }
+    ]
+}
 }
