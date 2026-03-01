@@ -170,7 +170,9 @@ function openFile(filePath) {
 function printFileWindows(filePath) {
     return new Promise((resolve, reject) => {
         const safePath = String(filePath).replace(/'/g, "''");
-        const psScript = [
+
+        // 1. First, try the proper COM automation
+        const psComScript = [
             "$ErrorActionPreference='Stop'",
             '$excel = New-Object -ComObject Excel.Application',
             '$excel.Visible = $false',
@@ -183,16 +185,34 @@ function printFileWindows(filePath) {
             '[System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null'
         ].join('; ');
 
+        // 2. Fallback: Generic Windows Verb Print (if Excel is missing or COM is disabled)
+        const psFallbackScript = [
+            "$ErrorActionPreference='Stop'",
+            `Start-Process -FilePath '${safePath}' -Verb Print -PassThru | Wait-Process`
+        ].join('; ');
+
         execFile(
             'powershell.exe',
-            ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psScript],
+            ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psComScript],
             (error, stdout, stderr) => {
-                if (error) {
-                    const details = (stderr || stdout || error.message || '').trim();
-                    reject(new Error(details || 'PowerShell print failed.'));
+                if (!error) {
+                    resolve();
                     return;
                 }
-                resolve();
+
+                // If COM method fails (e.g. "Class not registered"), try the generic verb print fallback
+                execFile(
+                    'powershell.exe',
+                    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psFallbackScript],
+                    (fbError, fbStdout, fbStderr) => {
+                        if (fbError) {
+                            const details = (fbStderr || fbStdout || fbError.message || '').trim();
+                            reject(new Error(`Failed to print.\nCOM Error: ${error.message}\nFallback Error: ${details}`));
+                            return;
+                        }
+                        resolve();
+                    }
+                );
             }
         );
     });

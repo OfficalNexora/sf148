@@ -530,7 +530,7 @@ function Dashboard({ userRole, onLogout }) {
                     </div>
                     <div className="status-bar" style={{ color: statusColor }}>{status}</div>
                 </div>
-                {!isDesktopMode && (
+                {!isDesktopMode && !window.location.hostname.includes('vercel.app') && (
                     <div style={{
                         margin: '8px 16px 0 16px',
                         padding: '8px 10px',
