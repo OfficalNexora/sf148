@@ -18,11 +18,15 @@ Get-Process -Name "excel-bridge-server" -ErrorAction SilentlyContinue | Stop-Pro
 Get-Process -Name "ngrok" -ErrorAction SilentlyContinue | Stop-Process -Force
 
 # Also find and kill anything occupying port 8787 specifically
-$portProcess = Get-NetTCPConnection -LocalPort 8787 -ErrorAction SilentlyContinue
+$portProcess = Get-NetTCPConnection -LocalPort 8787 -State Listen -ErrorAction SilentlyContinue
 if ($portProcess) {
     Write-Host "Clearing port 8787 (PID: $($portProcess[0].OwningProcess))..." -ForegroundColor Cyan
     Stop-Process -Id $portProcess[0].OwningProcess -Force -ErrorAction SilentlyContinue
 }
+
+# COOLDOWN: Give the ngrok cloud a moment to realize the old session is dead
+Write-Host "Waiting 5 seconds for cloud cooldown..." -ForegroundColor Gray
+Start-Sleep -Seconds 5
 
 # 1. Check if ngrok exists
 if (-not (Test-Path $ngrokPath)) {
@@ -50,23 +54,44 @@ $bridgeProcess = $null
 $ngrokProcess = $null
 
 try {
-    # 3. Start the Bridge and Ngrok
+    # 3. Start the Bridge 
     Write-Host "Starting Excel Bridge Server..." -ForegroundColor Green
     $bridgePath = Join-Path $scriptDir "excel-bridge-server.exe"
     if (-not (Test-Path $bridgePath)) {
         throw "excel-bridge-server.exe not found in this folder."
     }
     
-    # Set the Key in the environment so the bridge picks it up
     $env:BRIDGE_API_KEY = $BridgeKey
-    
-    # Start Bridge
     $bridgeProcess = Start-Process -FilePath $bridgePath -WorkingDirectory $scriptDir -PassThru
-    
-    # Start Ngrok
-    Write-Host "Starting Ngrok Tunnel on port 8787..." -ForegroundColor Green
-    $ngrokArgs = @("http", "8787", "--config", $configPath)
-    $ngrokProcess = Start-Process -FilePath $ngrokPath -ArgumentList $ngrokArgs -WorkingDirectory $scriptDir -PassThru
+
+    # 4. Start Ngrok with Retry Loop
+    $maxRetries = 3
+    $retryCount = 0
+    $success = $false
+
+    while (-not $success -and $retryCount -lt $maxRetries) {
+        $retryCount++
+        if ($retryCount -gt 1) {
+            Write-Host "Retry $retryCount/$maxRetries: Waiting 10s for tunnel to release..." -ForegroundColor Yellow
+            Start-Sleep -Seconds 10
+        }
+
+        Write-Host "Starting Ngrok Tunnel (Region: ap) on port 8787..." -ForegroundColor Green
+        $ngrokArgs = @("http", "8787", "--region", "ap", "--config", $configPath)
+        $ngrokProcess = Start-Process -FilePath $ngrokPath -ArgumentList $ngrokArgs -WorkingDirectory $scriptDir -PassThru
+        
+        Start-Sleep -Seconds 3
+        if ($ngrokProcess.HasExited) {
+            Write-Host "Ngrok failed to start (Code: $($ngrokProcess.ExitCode))." -ForegroundColor Red
+        }
+        else {
+            $success = $true
+        }
+    }
+
+    if (-not $success) {
+        throw "Ngrok failed to start after $maxRetries attempts."
+    }
 
     Write-Host "------------------------------------------------" -ForegroundColor Cyan
     Write-Host "Processes started in separate windows!" -ForegroundColor Green
