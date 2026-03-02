@@ -151,19 +151,31 @@ function fixSharedFormulas(workbook) {
         ws.eachRow(row => {
             row.eachCell(cell => {
                 try {
-                    // Cell type 6 is Formula
-                    if (cell.type === 6 && cell.formula) {
+                    // If it's a formula, we MUST either flatten it or strip it
+                    if (cell.type === 6) {
+                        // Try to get the values. If this crashes, the catch block handles it.
                         const f = cell.formula;
+                        const res = cell.result;
+
                         if (f && typeof f === 'object' && f.shareType === 'shared') {
-                            const formulaText = f.formula;
-                            const result = cell.result;
-                            cell.value = { formula: formulaText, result: result };
+                            // Flatten shared formula to regular formula
+                            cell.value = { formula: f.formula, result: res };
+                        } else if (f && typeof f === 'object') {
+                            // Ensure it's not a weird object that might cause issues later
+                            cell.value = { formula: f.formula || String(f), result: res };
                         }
                     }
                 } catch (e) {
-                    // If accessing cell.formula crashes (a known exceljs bug with corrupted templates),
-                    // we log it and continue to avoid crashing the whole request.
-                    console.warn(`Skipping corrupted formula at ${cell.address}: ${e.message}`);
+                    // CRITICAL: If any part of the formula logic crashes, 
+                    // we MUST strip the formula entirely to allow the file to save.
+                    console.warn(`Nuking corrupted formula at ${cell.address}: ${e.message}`);
+                    try {
+                        // Attempt to keep the numeric/text result if possible
+                        const fallback = cell.result;
+                        cell.value = (fallback !== undefined && fallback !== null) ? fallback : '';
+                    } catch (inner) {
+                        cell.value = ''; // Total reset as last resort
+                    }
                 }
             });
         });
