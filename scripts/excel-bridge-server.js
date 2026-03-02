@@ -6,19 +6,31 @@ const os = require('os');
 const path = require('path');
 const { exec, execFile } = require('child_process');
 
+function waitForEnter(exitCode = 1) {
+    console.log('\nPress Enter to exit...');
+    const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+    rl.on('line', () => process.exit(exitCode));
+}
+
+const STARTUP_LOG_FILE = path.join(process.cwd(), 'excel-bridge-startup.log');
+function logToFile(message) {
+    try {
+        fs.appendFileSync(STARTUP_LOG_FILE, `[${new Date().toISOString()}] ${message}\n`, 'utf8');
+    } catch { /* ignore */ }
+}
+
 let ExcelJS;
 const API_KEY = process.env.BRIDGE_API_KEY || 'sf10-bridge-2024';
 try {
     console.log('Loading dependencies...');
     ExcelJS = require('exceljs');
     console.log('ExcelJS loaded successfully.');
+} catch (err) {
+    console.error('Failed to load dependencies:', err);
+    logToFile(`Dependency load error: ${err.message}`);
+}
 
-    function waitForEnter(exitCode = 1) {
-        console.log('\nPress Enter to exit...');
-        const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
-        rl.on('line', () => process.exit(exitCode));
-    }
-
+try {
     const PORT = Number(process.env.BRIDGE_PORT || 8787);
     const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
     const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
@@ -40,26 +52,14 @@ try {
         || path.join(process.cwd(), TEMPLATE_CANDIDATE_NAMES[1]);
 
     const OUTPUT_DIR = process.env.BRIDGE_OUTPUT_DIR || path.join(os.tmpdir(), 'form137-exports');
-    const STARTUP_LOG_FILE = path.join(process.cwd(), 'excel-bridge-startup.log');
 
     if (!fs.existsSync(OUTPUT_DIR)) {
         fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     }
 
-    function logToFile(message) {
-        try {
-            fs.appendFileSync(
-                STARTUP_LOG_FILE,
-                `[${new Date().toISOString()}] ${message}\n`,
-                'utf8'
-            );
-        } catch {
-            // Ignore logging errors.
-        }
-    }
-
     function setCors(req, res) {
-        const origin = req.headers.origin || ALLOW_ORIGIN;
+        if (!res) return;
+        const origin = (req && req.headers && req.headers.origin) || ALLOW_ORIGIN;
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Bridge-Key,ngrok-skip-browser-warning');
@@ -637,7 +637,7 @@ try {
                 await openFile(filePath);
             }
 
-            return sendJson(res, 200, { success: true, filePath, printed, warning });
+            return sendJson(req, res, 200, { success: true, filePath, printed, warning });
         } catch (err) {
             console.error('Bridge request error:', err);
             logToFile(`Request error: ${err.stack || err.message}`);
