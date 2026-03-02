@@ -80,12 +80,16 @@ try {
 
     # Monitor
     while ($true) {
-        if ($bridgeProcess.HasExited) { 
-            Write-Host "`n[ERROR] Excel Bridge Server has stopped unexpectedly." -ForegroundColor Red
-            Write-Host "Please check 'excel-bridge-startup.log' in this folder for details." -ForegroundColor Yellow
-            throw "Excel Bridge Server stopped."
+        if ($bridgeProcess -and $bridgeProcess.HasExited) { 
+            Write-Host "`n[!ERROR] Excel Bridge Server has stopped!" -ForegroundColor Red
+            Write-Host "Exit Code: $($bridgeProcess.ExitCode)" -ForegroundColor Yellow
+            throw "Bridge binary exited."
         }
-        if ($ngrokProcess.HasExited) { throw "Ngrok has stopped unexpectedly." }
+        if ($ngrokProcess -and $ngrokProcess.HasExited) { 
+            Write-Host "`n[!ERROR] Ngrok has stopped!" -ForegroundColor Red
+            Write-Host "Exit Code: $($ngrokProcess.ExitCode)" -ForegroundColor Yellow
+            throw "Ngrok exited."
+        }
         Start-Sleep -Seconds 2
     }
 }
@@ -102,6 +106,7 @@ finally {
     if ($ngrokProcess -and -not $ngrokProcess.HasExited) { 
         Stop-Process -Id $ngrokProcess.Id -Force -ErrorAction SilentlyContinue 
     }
-    Write-Host "Done. Press any key to exit."
-    cmd /c pause
+    Write-Host "`nCleanup complete." -ForegroundColor Gray
+    Write-Host "Press any key to exit this window..." -ForegroundColor White
+    $null = [Console]::ReadKey()
 }

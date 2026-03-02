@@ -19,6 +19,20 @@ function logToFile(message) {
     } catch { /* ignore */ }
 }
 
+process.on('uncaughtException', (error) => {
+    const detail = `Uncaught exception: ${error.stack || error.message}`;
+    console.error(detail);
+    logToFile(detail);
+    waitForEnter(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+    const detail = `Unhandled rejection: ${reason && reason.stack ? reason.stack : String(reason)}`;
+    console.error(detail);
+    logToFile(detail);
+    waitForEnter(1);
+});
+
 let ExcelJS;
 const API_KEY = process.env.BRIDGE_API_KEY || 'sf10-bridge-2024';
 try {
@@ -700,21 +714,6 @@ try {
         waitForEnter(1);
     });
 
-    process.on('uncaughtException', (error) => {
-        const detail = `Uncaught exception: ${error.stack || error.message}`;
-        console.error(detail);
-        console.error(`Log file: ${STARTUP_LOG_FILE}`);
-        logToFile(detail);
-        waitForEnter(1);
-    });
-
-    process.on('unhandledRejection', (reason) => {
-        const detail = `Unhandled rejection: ${reason && reason.stack ? reason.stack : String(reason)}`;
-        console.error(detail);
-        console.error(`Log file: ${STARTUP_LOG_FILE}`);
-        logToFile(detail);
-        waitForEnter(1);
-    });
 
     console.log('Starting server listener...');
     server.listen(PORT, HOST, () => {
