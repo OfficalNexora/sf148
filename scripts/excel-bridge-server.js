@@ -201,7 +201,7 @@ try {
                 placeholderMap[`s${sNum}q1_${rowNum}`] = normalize(subj?.q1);
                 placeholderMap[`s${sNum}q2_${rowNum}`] = normalize(subj?.q2);
                 placeholderMap[`s${sNum}fin_${rowNum}`] = normalize(subj?.final);
-                placeholderMap[`s${sNum}act_${rowNum}`] = normalize(subj?.action);
+                placeholderMap[`s${sNum}act_${rowNum}`] = normalize(subj?.action || subj?.actionTaken);
             });
         });
 
@@ -286,8 +286,8 @@ try {
         sheet.getCell(r, 42).value = normalize(semData.gradeLevel);
         // SY (Col 53 / BA)
         sheet.getCell(r, 53).value = normalize(semData.sy);
-        // SEM (Col 63 / BK)
-        sheet.getCell(r, 63).value = normalize(semData.semester);
+        // SEM (Col 63 / BK) - Support both semester and sem
+        sheet.getCell(r, 63).value = normalize(semData.semester || semData.sem);
 
         // Track/Strand (2 rows down, Col 7 / G)
         sheet.getCell(r + 2, 7).value = normalize(semData.trackStrand);
@@ -302,10 +302,10 @@ try {
             const r = startRow + idx;
             if (r > 2000) return; // Safety
 
-            // Col A (1): Type
-            sheet.getCell(r, 1).value = normalize(subj.type);
-            // Col I (9): Subject Name
-            sheet.getCell(r, 9).value = normalize(subj.subject);
+            // Col A (1): #/Type
+            sheet.getCell(r, 1).value = normalize(subj.type || (idx + 1));
+            // Col E (5): Subject Name (Adjusting from I/9 to E/5 for PLACEHOLDER(ALL))
+            sheet.getCell(r, 5).value = normalize(subj.subject);
             // Col AT (46): Q1
             sheet.getCell(r, 46).value = normalize(subj.q1);
             // Col AY (51): Q2
@@ -313,7 +313,7 @@ try {
             // Col BD (56): Final
             sheet.getCell(r, 56).value = normalize(subj.final);
             // Col BI (61): Action
-            sheet.getCell(r, 61).value = normalize(subj.action);
+            sheet.getCell(r, 61).value = normalize(subj.action || subj.actionTaken);
         });
     }
 
@@ -474,9 +474,9 @@ try {
             fillSemesterInfo(front, 23, data.semester1);
             fillSemesterSubjects(front, 28, data.semester1?.subjects);
 
-            // Sem 2 Start: Row 66, Subjects Start: Row 71
-            fillSemesterInfo(front, 66, data.semester2);
-            fillSemesterSubjects(front, 71, data.semester2?.subjects);
+            // Sem 2 Start: Row 43 (approx +20 from Sem 1), Subjects Start: Row 48
+            fillSemesterInfo(front, 43, data.semester2);
+            fillSemesterSubjects(front, 48, data.semester2?.subjects);
         }
 
         if (back) {
@@ -485,13 +485,13 @@ try {
             writeByLabel(back, 'DATE OF GRADUATION', data.certification?.gradDate, 2, 2);
             writeByLabel(back, 'NAME OF SCHOOL', data.certification?.schoolHead, 2);
 
-            // Sem 3 Start: Row 4, Subjects Start: Row 11
+            // Sem 3 Start: Row 4, Subjects Start: Row 9
             fillSemesterInfo(back, 4, data.semester3);
-            fillSemesterSubjects(back, 11, data.semester3?.subjects);
+            fillSemesterSubjects(back, 9, data.semester3?.subjects);
 
-            // Sem 4 Start: Row 46, Subjects Start: Row 51
-            fillSemesterInfo(back, 46, data.semester4);
-            fillSemesterSubjects(back, 51, data.semester4?.subjects);
+            // Sem 4 Start: Row 24 (+20 from Sem 3), Subjects Start: Row 29
+            fillSemesterInfo(back, 24, data.semester4);
+            fillSemesterSubjects(back, 29, data.semester4?.subjects);
 
             // Remedial Sections (Offsets from respective semester blocks)
             // Sem 1 Remedial: Row 55 on Front
@@ -608,6 +608,17 @@ try {
                 console.error('Validation failed: Missing student data');
                 return sendJson(req, res, 400, { success: false, error: 'Missing student data.' });
             }
+
+            // DEBUG LOGGING
+            console.log('--- STUDENT DATA RECEIVED ---');
+            console.log(`Student: ${data.info.fname} ${data.info.lname} (LRN: ${data.info.lrn})`);
+            ['semester1', 'semester2', 'semester3', 'semester4'].forEach(s => {
+                if (data[s]) {
+                    const sem = data[s];
+                    console.log(`[${s}] School: ${sem.school}, Sem: ${sem.semester || sem.sem}, Subjects: ${sem.subjects?.length || 0}`);
+                }
+            });
+            console.log('-----------------------------');
 
             const autoPrint = Boolean(body && body.autoPrint);
             const openAfterPrint = body && body.openAfterPrint !== false;
