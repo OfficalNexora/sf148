@@ -1,66 +1,93 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 function normalize(value) {
     if (value === undefined || value === null) return '';
     return String(value);
 }
 
+/**
+ * Searches for a label text in the worksheet and writes to a cell relative to it.
+ */
 function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 24) {
-    if (value === undefined || value === null || value === '') return;
-    if (!ws || !ws['!ref']) return;
+    if (value === undefined || value === null || value === '') return false;
+    if (!ws) return false;
 
     const search = label.toUpperCase();
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    const endCol = Math.min(range.e.c, maxCol);
+    let found = false;
 
-    for (let r = range.s.r; r <= range.e.r; r++) {
-        for (let c = range.s.c; c <= endCol; c++) {
-            const addr = XLSX.utils.encode_cell({ r, c });
-            const cell = ws[addr];
-            const text = (cell && cell.v !== undefined && cell.v !== null)
-                ? String(cell.v).toUpperCase()
-                : '';
-
+    // ExcelJS iterate rows
+    ws.eachRow((row) => {
+        if (found) return;
+        row.eachCell((cell) => {
+            if (found) return;
+            const text = normalize(cell.value).toUpperCase();
             if (text.includes(search)) {
-                const target = XLSX.utils.encode_cell({ r: r + offsetRow, c: c + offsetCol });
-                ws[target] = {
-                    t: 's',
-                    v: normalize(value)
-                };
-                return;
+                const targetRow = cell.row + offsetRow;
+                const targetCol = cell.col + offsetCol;
+                if (targetCol <= maxCol + offsetCol) {
+                    ws.getCell(targetRow, targetCol).value = normalize(value);
+                    found = true;
+                }
             }
-        }
-    }
+        });
+    });
+    return found;
 }
 
-function buildSummarySheet(data) {
-    const rows = [];
-    rows.push(['FORM 137 - Student Permanent Record']);
-    rows.push([]);
-    rows.push(['Last Name', data.info?.lname || '']);
-    rows.push(['First Name', data.info?.fname || '']);
-    rows.push(['Middle Name', data.info?.mname || '']);
-    rows.push(['LRN', data.info?.lrn || '']);
-    rows.push(['Sex', data.info?.sex || '']);
-    rows.push(['Date of Birth', data.info?.birthdate || '']);
-    rows.push([]);
+function fillSemesterInfo(sheet, startRow, semData) {
+    if (!sheet || !semData) return;
+    const r = startRow;
+    sheet.getCell(r, 5).value = normalize(semData.school);
+    sheet.getCell(r, 29).value = normalize(semData.schoolId);
+    sheet.getCell(r, 42).value = normalize(semData.gradeLevel);
+    sheet.getCell(r, 53).value = normalize(semData.sy);
+    sheet.getCell(r, 63).value = normalize(semData.semester);
+    sheet.getCell(r + 2, 7).value = normalize(semData.trackStrand);
+    sheet.getCell(r + 2, 43).value = normalize(semData.section);
+}
+
+function fillSemesterSubjects(sheet, startRow, subjects) {
+    if (!sheet || !subjects || !Array.isArray(subjects)) return;
+    subjects.forEach((subj, idx) => {
+        const r = startRow + idx;
+        if (idx > 100) return; // Safety
+        sheet.getCell(r, 1).value = normalize(subj.type);
+        sheet.getCell(r, 9).value = normalize(subj.subject);
+        sheet.getCell(r, 46).value = normalize(subj.q1);
+        sheet.getCell(r, 51).value = normalize(subj.q2);
+        sheet.getCell(r, 56).value = normalize(subj.final);
+        sheet.getCell(r, 61).value = normalize(subj.action);
+    });
+}
+
+function buildSummarySheet(workbook, data) {
+    const sheet = workbook.addWorksheet('Form137');
+    sheet.addRow(['FORM 137 - Student Permanent Record']);
+    sheet.addRow([]);
+    sheet.addRow(['Last Name', data.info?.lname || '']);
+    sheet.addRow(['First Name', data.info?.fname || '']);
+    sheet.addRow(['Middle Name', data.info?.mname || '']);
+    sheet.addRow(['LRN', data.info?.lrn || '']);
+    sheet.addRow(['Sex', data.info?.sex || '']);
+    sheet.addRow(['Date of Birth', data.info?.birthdate || '']);
+    sheet.addRow([]);
 
     const semesterKeys = ['semester1', 'semester2', 'semester3', 'semester4'];
     semesterKeys.forEach((semKey, index) => {
         const sem = data[semKey];
         if (!sem) return;
 
-        rows.push([`Semester ${index + 1}`]);
-        rows.push(['School', sem.school || '']);
-        rows.push(['School Year', sem.sy || '']);
-        rows.push(['Grade Level', sem.gradeLevel || '']);
-        rows.push(['Track/Strand', sem.trackStrand || '']);
-        rows.push(['Section', sem.section || '']);
-        rows.push(['Type', 'Subject', 'Q1', 'Q2', 'Final', 'Action']);
+        sheet.addRow([`Semester ${index + 1}`]);
+        sheet.addRow(['School', sem.school || '']);
+        sheet.addRow(['School Year', sem.sy || '']);
+        sheet.addRow(['Grade Level', sem.gradeLevel || '']);
+        sheet.addRow(['Track/Strand', sem.trackStrand || '']);
+        sheet.addRow(['Section', sem.section || '']);
+        sheet.addRow(['Type', 'Subject', 'Q1', 'Q2', 'Final', 'Action']);
 
         (sem.subjects || []).forEach((subj) => {
             if (!subj || !subj.subject) return;
-            rows.push([
+            sheet.addRow([
                 subj.type || '',
                 subj.subject || '',
                 subj.q1 || '',
@@ -70,65 +97,36 @@ function buildSummarySheet(data) {
             ]);
         });
 
-        rows.push(['General Average', sem.genAve || '']);
-        rows.push(['Remarks', sem.remarks || '']);
-        rows.push([]);
+        sheet.addRow(['General Average', sem.genAve || '']);
+        sheet.addRow(['Remarks', sem.remarks || '']);
+        sheet.addRow([]);
     });
-
-    return XLSX.utils.aoa_to_sheet(rows);
 }
 
-function fillSemesterInfo(sheet, startRow, semData) {
-    if (!sheet || !semData) return;
-    const r = startRow - 1;
-    // School
-    sheet[XLSX.utils.encode_cell({ r, c: 4 })] = { t: 's', v: normalize(semData.school) };
-    // School ID
-    sheet[XLSX.utils.encode_cell({ r, c: 28 })] = { t: 's', v: normalize(semData.schoolId) };
-    // Grade Level
-    sheet[XLSX.utils.encode_cell({ r, c: 41 })] = { t: 's', v: normalize(semData.gradeLevel) };
-    // SY
-    sheet[XLSX.utils.encode_cell({ r, c: 52 })] = { t: 's', v: normalize(semData.sy) };
-    // SEM
-    sheet[XLSX.utils.encode_cell({ r, c: 62 })] = { t: 's', v: normalize(semData.semester) };
-    // Track/Strand
-    sheet[XLSX.utils.encode_cell({ r: r + 2, c: 6 })] = { t: 's', v: normalize(semData.trackStrand) };
-    // Section
-    sheet[XLSX.utils.encode_cell({ r: r + 2, c: 42 })] = { t: 's', v: normalize(semData.section) };
-}
-
-function fillSemesterSubjects(sheet, startRow, subjects) {
-    if (!sheet || !subjects || !Array.isArray(subjects)) return;
-    subjects.forEach((subj, idx) => {
-        const r = startRow - 1 + idx;
-        sheet[XLSX.utils.encode_cell({ r, c: 0 })] = { t: 's', v: normalize(subj.type) };
-        sheet[XLSX.utils.encode_cell({ r, c: 8 })] = { t: 's', v: normalize(subj.subject) };
-        sheet[XLSX.utils.encode_cell({ r, c: 45 })] = { t: 's', v: normalize(subj.q1) };
-        sheet[XLSX.utils.encode_cell({ r, c: 50 })] = { t: 's', v: normalize(subj.q2) };
-        sheet[XLSX.utils.encode_cell({ r, c: 55 })] = { t: 's', v: normalize(subj.final) };
-        sheet[XLSX.utils.encode_cell({ r, c: 60 })] = { t: 's', v: normalize(subj.action) };
-    });
+async function triggerDownload(workbook, filename) {
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
 }
 
 export async function generateExcelForm(data) {
     try {
         const response = await fetch('/Form 137-SHS-BLANK.xlsx');
+        const filename = `Form137_${(data.info?.lname || 'Student').replace(/[^a-z0-9]/gi, '_')}.xlsx`;
 
-        let workbook = null;
         if (response.ok) {
             const arrayBuffer = await response.arrayBuffer();
-            workbook = XLSX.read(arrayBuffer, {
-                type: 'array',
-                cellStyles: true,
-                cellFormula: true
-            });
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.load(arrayBuffer);
 
-            const sheetNames = workbook.SheetNames || [];
-            const frontName = sheetNames.find(name => name.toUpperCase().includes('FRONT')) || sheetNames[0];
-            const backName = sheetNames.find(name => name.toUpperCase().includes('BACK')) || sheetNames[1] || frontName;
-
-            const front = frontName ? workbook.Sheets[frontName] : null;
-            const back = backName ? workbook.Sheets[backName] : null;
+            const sheets = workbook.worksheets;
+            const front = sheets.find(s => s.name.toUpperCase().includes('FRONT')) || sheets[0];
+            const back = sheets.find(s => s.name.toUpperCase().includes('BACK')) || sheets[1] || front;
 
             if (front) {
                 writeByLabel(front, 'LAST NAME', data.info?.lname);
@@ -162,14 +160,13 @@ export async function generateExcelForm(data) {
                 fillSemesterSubjects(back, 51, data.semester4?.subjects);
             }
 
-            const filename = `Form137_${(data.info?.lname || 'Student').replace(/[^a-z0-9]/gi, '_')}.xlsx`;
-            XLSX.writeFile(workbook, filename);
+            await triggerDownload(workbook, filename);
             return { success: true };
         }
 
-        workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, buildSummarySheet(data), 'Form137');
-        XLSX.writeFile(workbook, `Form137_${Date.now()}.xlsx`);
+        const workbook = new ExcelJS.Workbook();
+        buildSummarySheet(workbook, data);
+        await triggerDownload(workbook, `Form137_Summary_${Date.now()}.xlsx`);
         return { success: true };
     } catch (error) {
         console.error('Error generating Excel file:', error);

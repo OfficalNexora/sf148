@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { exec, execFile } = require('child_process');
-const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 
 const PORT = Number(process.env.BRIDGE_PORT || 8787);
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
@@ -58,114 +58,110 @@ function normalize(value) {
     return String(value);
 }
 
+/**
+ * Searches for a label text in the worksheet and writes to a cell relative to it.
+ */
 function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 24) {
-    if (value === undefined || value === null || value === '') return;
-    if (!ws || !ws['!ref']) return;
+    if (value === undefined || value === null || value === '') return false;
+    if (!ws) return false;
 
     const search = label.toUpperCase();
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    const endCol = Math.min(range.e.c, maxCol);
+    let found = false;
 
-    for (let r = range.s.r; r <= range.e.r; r++) {
-        for (let c = range.s.c; c <= endCol; c++) {
-            const addr = XLSX.utils.encode_cell({ r, c });
-            const cell = ws[addr];
-            const text = (cell && cell.v !== undefined && cell.v !== null)
-                ? String(cell.v).toUpperCase()
-                : '';
-
+    ws.eachRow((row) => {
+        if (found) return;
+        row.eachCell((cell) => {
+            if (found) return;
+            const text = normalize(cell.value).toUpperCase();
             if (text.includes(search)) {
-                const target = XLSX.utils.encode_cell({ r: r + offsetRow, c: c + offsetCol });
-                ws[target] = { t: 's', v: normalize(value) };
-                return true; // Match found
+                // ExcelJS column/row are 1-indexed
+                const targetRow = cell.row + offsetRow;
+                const targetCol = cell.col + offsetCol;
+                if (targetCol <= maxCol + offsetCol) {
+                    ws.getCell(targetRow, targetCol).value = normalize(value);
+                    found = true;
+                }
             }
-        }
-    }
-    return false;
+        });
+    });
+    return found;
 }
 
 function fillSemesterInfo(sheet, startRow, semData) {
     if (!sheet || !semData) return;
 
-    // Headers are at fixed relative positions from the "SCHOOL:" label
-    // or we can just hope writeByLabel finds them unique within the sheet if we restrict range.
-    // For safety, we use the specific rows we found.
+    // ExcelJS uses 1-based indexing for row/col
+    const r = startRow;
 
-    // Sem 1 (FRONT): Row 23
-    // Sem 2 (FRONT): Row 66
-    // Sem 3 (BACK): Row 4
-    // Sem 4 (BACK): Row 46
+    // School (Col 5 / E)
+    sheet.getCell(r, 5).value = normalize(semData.school);
+    // School ID (Col 29 / AC)
+    sheet.getCell(r, 29).value = normalize(semData.schoolId);
+    // Grade Level (Col 42 / AP)
+    sheet.getCell(r, 42).value = normalize(semData.gradeLevel);
+    // SY (Col 53 / BA)
+    sheet.getCell(r, 53).value = normalize(semData.sy);
+    // SEM (Col 63 / BK)
+    sheet.getCell(r, 63).value = normalize(semData.semester);
 
-    const r = startRow - 1; // 0-indexed
-
-    // School
-    sheet[XLSX.utils.encode_cell({ r, c: 4 })] = { t: 's', v: normalize(semData.school) };
-    // School ID
-    sheet[XLSX.utils.encode_cell({ r, c: 28 })] = { t: 's', v: normalize(semData.schoolId) };
-    // Grade Level
-    sheet[XLSX.utils.encode_cell({ r, c: 41 })] = { t: 's', v: normalize(semData.gradeLevel) };
-    // SY
-    sheet[XLSX.utils.encode_cell({ r, c: 52 })] = { t: 's', v: normalize(semData.sy) };
-    // SEM
-    sheet[XLSX.utils.encode_cell({ r, c: 62 })] = { t: 's', v: normalize(semData.semester) };
-
-    // Track/Strand (2 rows down)
-    sheet[XLSX.utils.encode_cell({ r: r + 2, c: 6 })] = { t: 's', v: normalize(semData.trackStrand) };
-    // Section
-    sheet[XLSX.utils.encode_cell({ r: r + 2, c: 42 })] = { t: 's', v: normalize(semData.section) };
+    // Track/Strand (2 rows down, Col 7 / G)
+    sheet.getCell(r + 2, 7).value = normalize(semData.trackStrand);
+    // Section (Col 43 / AQ)
+    sheet.getCell(r + 2, 43).value = normalize(semData.section);
 }
 
 function fillSemesterSubjects(sheet, startRow, subjects) {
     if (!sheet || !subjects || !Array.isArray(subjects)) return;
 
     subjects.forEach((subj, idx) => {
-        const r = startRow - 1 + idx;
-        if (r > 1000) return; // Safety
+        const r = startRow + idx;
+        if (r > 2000) return; // Safety
 
-        // Col A (0): Type (CORE/APPLIED/SPECIALIZED)
-        sheet[XLSX.utils.encode_cell({ r, c: 0 })] = { t: 's', v: normalize(subj.type) };
-        // Col I (8): Subject Name
-        sheet[XLSX.utils.encode_cell({ r, c: 8 })] = { t: 's', v: normalize(subj.subject) };
-        // Col AT (45): Q1 / 1st
-        sheet[XLSX.utils.encode_cell({ r, c: 45 })] = { t: 's', v: normalize(subj.q1) };
-        // Col AY (50): Q2 / 2nd
-        sheet[XLSX.utils.encode_cell({ r, c: 50 })] = { t: 's', v: normalize(subj.q2) };
-        // Col BD (55): Final
-        sheet[XLSX.utils.encode_cell({ r, c: 55 })] = { t: 's', v: normalize(subj.final) };
-        // Col BI (60): Action
-        sheet[XLSX.utils.encode_cell({ r, c: 60 })] = { t: 's', v: normalize(subj.action) };
+        // Col A (1): Type
+        sheet.getCell(r, 1).value = normalize(subj.type);
+        // Col I (9): Subject Name
+        sheet.getCell(r, 9).value = normalize(subj.subject);
+        // Col AT (46): Q1
+        sheet.getCell(r, 46).value = normalize(subj.q1);
+        // Col AY (51): Q2
+        sheet.getCell(r, 51).value = normalize(subj.q2);
+        // Col BD (56): Final
+        sheet.getCell(r, 56).value = normalize(subj.final);
+        // Col BI (61): Action
+        sheet.getCell(r, 61).value = normalize(subj.action);
     });
 }
 
 function createSummaryWorkbook(data) {
-    const wb = XLSX.utils.book_new();
-    const rows = [];
-    rows.push(['FORM 137 - Student Permanent Record']);
-    rows.push([]);
-    rows.push(['Last Name', data.info?.lname || '']);
-    rows.push(['First Name', data.info?.fname || '']);
-    rows.push(['Middle Name', data.info?.mname || '']);
-    rows.push(['LRN', data.info?.lrn || '']);
-    rows.push(['Sex', data.info?.sex || '']);
-    rows.push(['Date of Birth', data.info?.birthdate || '']);
-    rows.push([]);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Form137');
+
+    sheet.addRow(['FORM 137 - Student Permanent Record']);
+    sheet.addRow([]);
+    sheet.addRow(['Last Name', data.info?.lname || '']);
+    sheet.addRow(['First Name', data.info?.fname || '']);
+    sheet.addRow(['Middle Name', data.info?.mname || '']);
+    sheet.addRow(['LRN', data.info?.lrn || '']);
+    sheet.addRow(['Sex', data.info?.sex || '']);
+    sheet.addRow(['Date of Birth', data.info?.birthdate || '']);
+    sheet.addRow([]);
 
     const semesterKeys = ['semester1', 'semester2', 'semester3', 'semester4'];
     semesterKeys.forEach((semKey, index) => {
         const sem = data[semKey];
         if (!sem) return;
 
-        rows.push([`Semester ${index + 1}`]);
-        rows.push(['School', sem.school || '']);
-        rows.push(['School Year', sem.sy || '']);
-        rows.push(['Grade Level', sem.gradeLevel || '']);
-        rows.push(['Track/Strand', sem.trackStrand || '']);
-        rows.push(['Section', sem.section || '']);
-        rows.push(['Type', 'Subject', 'Q1', 'Q2', 'Final', 'Action']);
+        sheet.addRow([`Semester ${index + 1}`]);
+        sheet.addRow(['School', sem.school || '']);
+        sheet.addRow(['School Year', sem.sy || '']);
+        sheet.addRow(['Grade Level', sem.gradeLevel || '']);
+        sheet.addRow(['Track/Strand', sem.trackStrand || '']);
+        sheet.addRow(['Section', sem.section || '']);
+        sheet.addRow(['Type', 'Subject', 'Q1', 'Q2', 'Final', 'Action']);
 
         (sem.subjects || []).forEach((subj) => {
             if (!subj || !subj.subject) return;
-            rows.push([
+            sheet.addRow([
                 subj.type || '',
                 subj.subject || '',
                 subj.q1 || '',
@@ -175,32 +171,25 @@ function createSummaryWorkbook(data) {
             ]);
         });
 
-        rows.push(['General Average', sem.genAve || '']);
-        rows.push(['Remarks', sem.remarks || '']);
-        rows.push([]);
+        sheet.addRow(['General Average', sem.genAve || '']);
+        sheet.addRow(['Remarks', sem.remarks || '']);
+        sheet.addRow([]);
     });
 
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, 'Form137');
-    return wb;
+    return workbook;
 }
 
-function createWorkbookFromTemplate(data) {
+async function createWorkbookFromTemplate(data) {
     if (!fs.existsSync(TEMPLATE_PATH)) {
         return createSummaryWorkbook(data);
     }
 
-    const wb = XLSX.readFile(TEMPLATE_PATH, {
-        cellStyles: true,
-        cellFormula: true
-    });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(TEMPLATE_PATH);
 
-    const sheetNames = wb.SheetNames || [];
-    const frontName = sheetNames.find(name => name.toUpperCase().includes('FRONT')) || sheetNames[0];
-    const backName = sheetNames.find(name => name.toUpperCase().includes('BACK')) || sheetNames[1] || frontName;
-
-    const front = frontName ? wb.Sheets[frontName] : null;
-    const back = backName ? wb.Sheets[backName] : null;
+    const sheets = workbook.worksheets;
+    const front = sheets.find(s => s.name.toUpperCase().includes('FRONT')) || sheets[0];
+    const back = sheets.find(s => s.name.toUpperCase().includes('BACK')) || sheets[1] || front;
 
     if (front) {
         writeByLabel(front, 'LAST NAME', data.info?.lname);
@@ -216,10 +205,11 @@ function createWorkbookFromTemplate(data) {
         writeByLabel(front, 'NAME OF SCHOOL', data.eligibility?.schoolName, 2);
         writeByLabel(front, 'SCHOOL ADDRESS', data.eligibility?.schoolAddress, 1);
 
-        // Fill Semester 1 & 2 (Grade 11)
+        // Sem 1 Start: Row 23, Subjects Start: Row 28
         fillSemesterInfo(front, 23, data.semester1);
         fillSemesterSubjects(front, 28, data.semester1?.subjects);
 
+        // Sem 2 Start: Row 66, Subjects Start: Row 71
         fillSemesterInfo(front, 66, data.semester2);
         fillSemesterSubjects(front, 71, data.semester2?.subjects);
     }
@@ -230,15 +220,16 @@ function createWorkbookFromTemplate(data) {
         writeByLabel(back, 'DATE OF GRADUATION', data.certification?.gradDate, 2, 2);
         writeByLabel(back, 'NAME OF SCHOOL', data.certification?.schoolHead, 2);
 
-        // Fill Semester 3 & 4 (Grade 12)
+        // Sem 3 Start: Row 4, Subjects Start: Row 11
         fillSemesterInfo(back, 4, data.semester3);
         fillSemesterSubjects(back, 11, data.semester3?.subjects);
 
+        // Sem 4 Start: Row 46, Subjects Start: Row 51
         fillSemesterInfo(back, 46, data.semester4);
         fillSemesterSubjects(back, 51, data.semester4?.subjects);
     }
 
-    return wb;
+    return workbook;
 }
 
 function openFile(filePath) {
@@ -263,7 +254,6 @@ function printFileWindows(filePath) {
     return new Promise((resolve, reject) => {
         const safePath = String(filePath).replace(/'/g, "''");
 
-        // 1. First, try the proper COM automation
         const psComScript = [
             "$ErrorActionPreference='Stop'",
             '$excel = New-Object -ComObject Excel.Application',
@@ -277,7 +267,6 @@ function printFileWindows(filePath) {
             '[System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null'
         ].join('; ');
 
-        // 2. Fallback: Generic Windows Verb Print (if Excel is missing or COM is disabled)
         const psFallbackScript = [
             "$ErrorActionPreference='Stop'",
             `Start-Process -FilePath '${safePath}' -Verb Print -PassThru | Wait-Process`
@@ -286,13 +275,9 @@ function printFileWindows(filePath) {
         execFile(
             'powershell.exe',
             ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psComScript],
-            (error, stdout, stderr) => {
-                if (!error) {
-                    resolve();
-                    return;
-                }
+            (error) => {
+                if (!error) return resolve();
 
-                // If COM method fails (e.g. "Class not registered"), try the generic verb print fallback
                 execFile(
                     'powershell.exe',
                     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psFallbackScript],
@@ -339,45 +324,51 @@ async function handleOpenExcel(req, res) {
         }
     }
 
-    const body = await parseBody(req);
-    const data = body && body.data;
-    if (!data || !data.info) {
-        return sendJson(res, 400, { success: false, error: 'Missing student data.' });
-    }
+    try {
+        const body = await parseBody(req);
+        const data = body && body.data;
+        if (!data || !data.info) {
+            return sendJson(res, 400, { success: false, error: 'Missing student data.' });
+        }
 
-    const autoPrint = Boolean(body && body.autoPrint);
-    const openAfterPrint = body && body.openAfterPrint !== false;
+        const autoPrint = Boolean(body && body.autoPrint);
+        const openAfterPrint = body && body.openAfterPrint !== false;
 
-    const workbook = createWorkbookFromTemplate(data);
-    const lastName = (data.info?.lname || 'Student').replace(/[^a-z0-9]/gi, '_');
-    const filePath = path.join(OUTPUT_DIR, `Form137_${lastName}_${Date.now()}.xlsx`);
-    XLSX.writeFile(workbook, filePath);
+        const workbook = await createWorkbookFromTemplate(data);
+        const lastName = (data.info?.lname || 'Student').replace(/[^a-z0-9]/gi, '_');
+        const filePath = path.join(OUTPUT_DIR, `Form137_${lastName}_${Date.now()}.xlsx`);
 
-    let warning = '';
-    let printed = false;
+        await workbook.xlsx.writeFile(filePath);
 
-    if (autoPrint) {
-        if (process.platform === 'win32') {
-            try {
-                await printFileWindows(filePath);
-                printed = true;
-            } catch (err) {
-                warning = `Auto print failed: ${err.message}`;
+        let warning = '';
+        let printed = false;
+
+        if (autoPrint) {
+            if (process.platform === 'win32') {
+                try {
+                    await printFileWindows(filePath);
+                    printed = true;
+                } catch (err) {
+                    warning = `Auto print failed: ${err.message}`;
+                    console.warn(warning);
+                }
+            } else {
+                warning = 'Auto print is only supported on Windows bridge hosts.';
                 console.warn(warning);
             }
-        } else {
-            warning = 'Auto print is only supported on Windows bridge hosts.';
-            console.warn(warning);
-        }
 
-        if (openAfterPrint) {
+            if (openAfterPrint) {
+                await openFile(filePath);
+            }
+        } else {
             await openFile(filePath);
         }
-    } else {
-        await openFile(filePath);
-    }
 
-    return sendJson(res, 200, { success: true, filePath, printed, warning });
+        return sendJson(res, 200, { success: true, filePath, printed, warning });
+    } catch (err) {
+        console.error('Bridge error:', err);
+        return sendJson(res, 500, { success: false, error: err.message });
+    }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -405,7 +396,7 @@ const server = http.createServer(async (req, res) => {
 
         return sendJson(res, 404, { success: false, error: 'Not found.' });
     } catch (err) {
-        console.error('Bridge error:', err);
+        console.error('Server error:', err);
         return sendJson(res, 500, { success: false, error: err.message });
     }
 });
@@ -438,7 +429,6 @@ process.on('uncaughtException', (error) => {
     console.error(detail);
     console.error(`Log file: ${STARTUP_LOG_FILE}`);
     logToFile(detail);
-    process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
@@ -446,7 +436,6 @@ process.on('unhandledRejection', (reason) => {
     console.error(detail);
     console.error(`Log file: ${STARTUP_LOG_FILE}`);
     logToFile(detail);
-    process.exit(1);
 });
 
 server.listen(PORT, HOST, () => {
@@ -456,7 +445,7 @@ server.listen(PORT, HOST, () => {
     console.log(`Status:  Online`);
     console.log(`Address: http://${HOST}:${PORT}`);
     console.log(`URL:     ${HOST === '127.0.0.1' ? 'Local' : HOST}`);
-    console.log(`Auth:    ${API_KEY ? 'Enabled' : 'Disabled'}`);
+    console.log(`Auth:    ${API_KEY ? `Enabled (Key: ${API_KEY})` : 'Disabled'}`);
     console.log('------------------------------------------------');
 
     if (fs.existsSync(TEMPLATE_PATH)) {

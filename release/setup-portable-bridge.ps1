@@ -1,5 +1,6 @@
 param(
-    [string]$AuthToken = "3AKzmN3su2n50gfv8qmMf8ZqpHj_275QXanCMyU8sVv46EYVp"
+    [string]$AuthToken = "3AKzmN3su2n50gfv8qmMf8ZqpHj_275QXanCMyU8sVv46EYVp",
+    [string]$BridgeKey = "sf10-bridge-2024"
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,6 +52,9 @@ try {
     if (-not (Test-Path $bridgePath)) {
         throw "excel-bridge-server.exe not found in this folder."
     }
+    
+    # Set the Key in the environment so the bridge picks it up
+    $env:BRIDGE_API_KEY = $BridgeKey
     
     # Start Bridge
     $bridgeProcess = Start-Process -FilePath $bridgePath -WorkingDirectory $scriptDir -PassThru
