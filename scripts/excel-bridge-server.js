@@ -150,11 +150,20 @@ function fixSharedFormulas(workbook) {
     workbook.worksheets.forEach(ws => {
         ws.eachRow(row => {
             row.eachCell(cell => {
-                // If cell has a formula object with shareType: 'shared', flatten it.
-                if (cell.formula && typeof cell.formula === 'object' && cell.formula.shareType === 'shared') {
-                    const formulaText = cell.formula.formula;
-                    const result = cell.result;
-                    cell.value = { formula: formulaText, result: result };
+                try {
+                    // Cell type 6 is Formula
+                    if (cell.type === 6 && cell.formula) {
+                        const f = cell.formula;
+                        if (f && typeof f === 'object' && f.shareType === 'shared') {
+                            const formulaText = f.formula;
+                            const result = cell.result;
+                            cell.value = { formula: formulaText, result: result };
+                        }
+                    }
+                } catch (e) {
+                    // If accessing cell.formula crashes (a known exceljs bug with corrupted templates),
+                    // we log it and continue to avoid crashing the whole request.
+                    console.warn(`Skipping corrupted formula at ${cell.address}: ${e.message}`);
                 }
             });
         });
