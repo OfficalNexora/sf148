@@ -64,10 +64,22 @@ try {
     # 3. Start the Bridge 
     Write-Host "Starting Excel Bridge Server..." -ForegroundColor Green
     $bridgePath = Join-Path $scriptDir "excel-bridge-server.exe"
-    if (-not (Test-Path $bridgePath)) { throw "excel-bridge-server.exe missing!" }
     
-    $env:BRIDGE_API_KEY = $BridgeKey
-    $bridgeProcess = Start-Process -FilePath $bridgePath -WorkingDirectory $scriptDir -PassThru -ErrorAction Stop
+    if (-not (Test-Path $bridgePath)) { 
+        Write-Host "[WARN] Portable EXE not found. Attempting to start with Python..." -ForegroundColor Yellow
+        $scriptPath = Join-Path $scriptDir "..", "scripts", "excel-bridge-server.py"
+        if (Test-Path $scriptPath) {
+            $env:BRIDGE_API_KEY = $BridgeKey
+            $bridgeProcess = Start-Process -FilePath "python.exe" -ArgumentList $scriptPath -WorkingDirectory (Split-Path $scriptPath) -PassThru -ErrorAction Stop
+        }
+        else {
+            throw "Excel Bridge Server not found (neither EXE nor Python script)!" 
+        }
+    }
+    else {
+        $env:BRIDGE_API_KEY = $BridgeKey
+        $bridgeProcess = Start-Process -FilePath $bridgePath -WorkingDirectory $scriptDir -PassThru -ErrorAction Stop
+    }
 
     # 4. Start Ngrok with Retry Loop
     $maxRetries = 3
