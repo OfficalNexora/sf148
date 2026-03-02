@@ -22,7 +22,7 @@ const API_KEY = process.env.BRIDGE_API_KEY || '';
 const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
 
 // Priority: 1. ENV, 2. Current Folder (for portable EXE), 3. public/ folder
-const TEMPLATE_NAME = 'Form 137-SHS-BLANK.xlsx';
+const TEMPLATE_NAME = 'Form137_Template.xlsx';
 const POSSIBLE_PATHS = [
     process.env.BRIDGE_TEMPLATE_PATH,
     path.join(process.cwd(), TEMPLATE_NAME),

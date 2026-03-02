@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import ExcelJS from 'exceljs/dist/exceljs.min.js';
 
 function normalize(value) {
     if (value === undefined || value === null) return '';
@@ -116,13 +116,23 @@ async function triggerDownload(workbook, filename) {
 
 export async function generateExcelForm(data) {
     try {
-        const response = await fetch('/Form 137-SHS-BLANK.xlsx');
+        const TEMPLATE_NAME = '/Form137_Template.xlsx';
+        const response = await fetch(TEMPLATE_NAME);
         const filename = `Form137_${(data.info?.lname || 'Student').replace(/[^a-z0-9]/gi, '_')}.xlsx`;
 
         if (response.ok) {
             const arrayBuffer = await response.arrayBuffer();
             const workbook = new ExcelJS.Workbook();
-            await workbook.xlsx.load(arrayBuffer);
+
+            try {
+                await workbook.xlsx.load(arrayBuffer);
+            } catch (loadErr) {
+                console.warn('Template load failed (likely drawing anchors bug), falling back to summary sheet:', loadErr);
+                const fallbackWb = new ExcelJS.Workbook();
+                buildSummarySheet(fallbackWb, data);
+                await triggerDownload(fallbackWb, `Form137_Summary_Fallback_${Date.now()}.xlsx`);
+                return { success: true };
+            }
 
             const sheets = workbook.worksheets;
             const front = sheets.find(s => s.name.toUpperCase().includes('FRONT')) || sheets[0];
