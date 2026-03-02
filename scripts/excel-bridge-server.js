@@ -92,26 +92,29 @@ try {
     }
 
     function findMergeBounds(ws, row, col) {
-        if (!ws || !ws.model || !Array.isArray(ws.model.merges)) return null;
-        for (const ref of ws.model.merges) {
-            const [start, end] = ref.split(':');
-            const startCell = ws.getCell(start);
-            const endCell = ws.getCell(end);
-            if (
-                row >= startCell.row
-                && row <= endCell.row
-                && col >= startCell.col
-                && col <= endCell.col
-            ) {
+        if (!ws || !ws._merges) return null;
+        // ExcelJS internal merges object is a map or array depending on version/state
+        // We'll iterate through the worksheet's merge cells
+        const address = ws.getCell(row, col).address;
+        for (const masterAddress in ws._merges) {
+            const merge = ws._merges[masterAddress];
+            if (row >= merge.top && row <= merge.bottom && col >= merge.left && col <= merge.right) {
                 return {
-                    startCol: startCell.col,
-                    endCol: endCell.col,
-                    startRow: startCell.row,
-                    endRow: endCell.row
+                    startCol: merge.left,
+                    endCol: merge.right,
+                    startRow: merge.top,
+                    endRow: merge.bottom
                 };
             }
         }
         return null;
+    }
+
+    function writeToCellMergeAware(ws, row, col, value) {
+        if (!ws || row < 1 || col < 1) return;
+        const merge = findMergeBounds(ws, row, col);
+        const targetCell = merge ? ws.getCell(merge.startRow, merge.startCol) : ws.getCell(row, col);
+        targetCell.value = normalize(value);
     }
 
     function excelCellToString(value) {
@@ -238,61 +241,51 @@ try {
     /**
      * Searches for a label text in the worksheet and writes to a cell relative to it.
      */
-    function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, anchorFromEnd = true, maxCol = 16384) {
+    function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, anchorFromEnd = true, rowLimit = { start: 1, end: 1000 }) {
         if (value === undefined || value === null || value === '') return false;
         if (!ws) return false;
 
         const search = label.toUpperCase();
         let found = false;
 
-        ws.eachRow((row) => {
-            if (found) return;
+        // Optimized search within row limits
+        for (let r = rowLimit.start; r <= rowLimit.end; r++) {
+            if (found) break;
+            const row = ws.getRow(r);
             row.eachCell((cell) => {
                 if (found) return;
                 const text = normalize(cell.value).toUpperCase();
                 if (text.includes(search)) {
-                    // If label is merged, we can anchor from start or end.
-                    // General inputs want to jump past the label (anchor from end).
-                    // Checkboxes want to tick the box to the left (anchor from start).
                     const merge = findMergeBounds(ws, cell.row, cell.col);
                     const baseCol = (anchorFromEnd && merge) ? merge.endCol : cell.col;
 
                     const targetRow = cell.row + offsetRow;
                     const targetCol = baseCol + offsetCol;
 
-                    if (targetCol >= 1 && targetCol <= maxCol && targetRow >= 1) {
-                        const targetCell = ws.getCell(targetRow, targetCol);
-                        console.log(`Label [${label}] found at ${cell.address}. Writing "${value}" to ${targetCell.address}`);
-                        targetCell.value = normalize(value);
+                    if (targetCol >= 1 && targetRow >= 1) {
+                        writeToCellMergeAware(ws, targetRow, targetCol, value);
+                        console.log(`Label [${label}] found at ${cell.address}. Writing "${value}" to offset ${offsetRow},${offsetCol}`);
                         found = true;
                     }
                 }
             });
-        });
+        }
         return found;
     }
 
     function fillSemesterInfo(sheet, startRow, semData) {
         if (!sheet || !semData) return;
 
-        // ExcelJS uses 1-based indexing for row/col
-        const r = startRow;
+        const rowRange = { start: startRow, end: startRow + 5 };
 
-        // School (Col 5 / E)
-        sheet.getCell(r, 5).value = normalize(semData.school);
-        // School ID (Col 29 / AC)
-        sheet.getCell(r, 29).value = normalize(semData.schoolId);
-        // Grade Level (Col 42 / AP)
-        sheet.getCell(r, 42).value = normalize(semData.gradeLevel);
-        // SY (Col 53 / BA)
-        sheet.getCell(r, 53).value = normalize(semData.sy);
-        // SEM (Col 63 / BK) - Support both semester and sem
-        sheet.getCell(r, 63).value = normalize(semData.semester || semData.sem);
-
-        // Track/Strand (2 rows down, Col 7 / G)
-        sheet.getCell(r + 2, 7).value = normalize(semData.trackStrand);
-        // Section (Col 43 / AQ)
-        sheet.getCell(r + 2, 43).value = normalize(semData.section);
+        // Search for labels within the semester header block
+        writeByLabel(sheet, 'SCHOOL:', semData.school, 1, 0, true, rowRange);
+        writeByLabel(sheet, 'SCHOOL ID:', semData.schoolId, 1, 0, true, rowRange);
+        writeByLabel(sheet, 'GRADE LEVEL:', semData.gradeLevel, 1, 0, true, rowRange);
+        writeByLabel(sheet, 'SY:', semData.sy, 1, 0, true, rowRange);
+        writeByLabel(sheet, 'SEM:', semData.semester || semData.sem, 1, 0, true, rowRange);
+        writeByLabel(sheet, 'TRACK/STRAND', semData.trackStrand, 1, 0, true, rowRange);
+        writeByLabel(sheet, 'SECTION', semData.section, 1, 0, true, rowRange);
     }
 
     function fillSemesterSubjects(sheet, startRow, subjects) {
@@ -303,17 +296,17 @@ try {
             if (r > 2000) return; // Safety
 
             // Col A (1): #/Type
-            sheet.getCell(r, 1).value = normalize(subj.type || (idx + 1));
-            // Col E (5): Subject Name (Adjusting from I/9 to E/5 for PLACEHOLDER(ALL))
-            sheet.getCell(r, 5).value = normalize(subj.subject);
+            writeToCellMergeAware(sheet, r, 1, subj.type || (idx + 1));
+            // Col E (5): Subject Name
+            writeToCellMergeAware(sheet, r, 5, subj.subject);
             // Col AT (46): Q1
-            sheet.getCell(r, 46).value = normalize(subj.q1);
+            writeToCellMergeAware(sheet, r, 46, subj.q1);
             // Col AY (51): Q2
-            sheet.getCell(r, 51).value = normalize(subj.q2);
+            writeToCellMergeAware(sheet, r, 51, subj.q2);
             // Col BD (56): Final
-            sheet.getCell(r, 56).value = normalize(subj.final);
+            writeToCellMergeAware(sheet, r, 56, subj.final);
             // Col BI (61): Action
-            sheet.getCell(r, 61).value = normalize(subj.action || subj.actionTaken);
+            writeToCellMergeAware(sheet, r, 61, subj.action || subj.actionTaken);
         });
     }
 
