@@ -142,6 +142,25 @@ function fillSemesterSubjects(sheet, startRow, subjects) {
     });
 }
 
+/**
+ * Fixes a common ExcelJS error: "Shared Formula master must exist above and or left of clone"
+ * by converting shared formulas into regular formulas just before saving.
+ */
+function fixSharedFormulas(workbook) {
+    workbook.worksheets.forEach(ws => {
+        ws.eachRow(row => {
+            row.eachCell(cell => {
+                // If cell has a formula object with shareType: 'shared', flatten it.
+                if (cell.formula && typeof cell.formula === 'object' && cell.formula.shareType === 'shared') {
+                    const formulaText = cell.formula.formula;
+                    const result = cell.result;
+                    cell.value = { formula: formulaText, result: result };
+                }
+            });
+        });
+    });
+}
+
 function createSummaryWorkbook(data) {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Form137');
@@ -356,6 +375,9 @@ async function handleOpenExcel(req, res) {
         const lastName = (data.info?.lname || 'Student').replace(/[^a-z0-9]/gi, '_');
         const filePath = path.join(OUTPUT_DIR, `Form137_${lastName}_${Date.now()}.xlsx`);
         console.log(`Saving to: ${filePath}`);
+
+        // IMPORTANT: Fix Shared Formula bug before saving
+        fixSharedFormulas(workbook);
 
         await workbook.xlsx.writeFile(filePath);
 
