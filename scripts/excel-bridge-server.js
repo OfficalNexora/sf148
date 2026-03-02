@@ -243,6 +243,16 @@ async function createWorkbookFromTemplate(data) {
     const back = sheets.find(s => s.name.toUpperCase().includes('BACK')) || sheets[1] || front;
 
     if (front) {
+        console.log('--- Front Sheet Structure (Rows 1-10) ---');
+        for (let i = 1; i <= 10; i++) {
+            const row = front.getRow(i);
+            const vals = [];
+            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                const v = normalize(cell.value);
+                if (v) vals.push(`[${cell.address}]: "${v}"`);
+            });
+            if (vals.length) console.log(`Row ${i}: ${vals.join(' | ')}`);
+        }
         writeByLabel(front, 'LAST NAME', data.info?.lname);
         writeByLabel(front, 'FIRST NAME', data.info?.fname);
         writeByLabel(front, 'MIDDLE NAME', data.info?.mname);
