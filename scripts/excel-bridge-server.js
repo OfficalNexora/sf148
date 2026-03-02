@@ -1,10 +1,20 @@
 /* eslint-disable no-console */
+console.log('--- Bridge Bootstrap Start ---');
 const http = require('http');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { exec, execFile } = require('child_process');
-const ExcelJS = require('exceljs');
+
+console.log('Loading dependencies...');
+let ExcelJS;
+try {
+    ExcelJS = require('exceljs');
+    console.log('ExcelJS loaded successfully.');
+} catch (err) {
+    console.error('FATAL: Failed to load exceljs:', err.message);
+    process.exit(1);
+}
 
 const PORT = Number(process.env.BRIDGE_PORT || 8787);
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
