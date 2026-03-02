@@ -20,6 +20,7 @@ if hasattr(sys, '_MEIPASS'):
 else:
     EXE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Check multiple places for the template
 PATHS_TO_CHECK = [
     os.path.join(EXE_DIR, TEMPLATE_NAME),
     os.path.join(EXE_DIR, 'release', TEMPLATE_NAME),
@@ -33,6 +34,12 @@ for p in PATHS_TO_CHECK:
         TEMPLATE_PATH = p
         break
 
+# Output directory for exported files
+OUTPUT_DIR = os.path.join(os.path.expanduser("~"), "form137-exports")
+if not os.path.exists(OUTPUT_DIR):
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# Logging to help debug crashes
 LOG_FILE = os.path.join(EXE_DIR, "excel-bridge-python.log")
 def log_it(msg):
     try:
@@ -71,7 +78,12 @@ CORS(app)
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"success": True, "status": "Running", "template": TEMPLATE_PATH})
+    return jsonify({
+        "success": True, 
+        "status": "Running",
+        "template": TEMPLATE_PATH,
+        "exe_dir": EXE_DIR
+    })
 
 @app.route('/open-excel', methods=['POST'])
 def open_excel():
@@ -94,6 +106,7 @@ def open_excel():
 
         wb = openpyxl.load_workbook(TEMPLATE_PATH)
         
+        # Robust sheet selection
         sn = [s.upper() for s in wb.sheetnames]
         ws_front = wb[wb.sheetnames[sn.index('FRONT')]] if 'FRONT' in sn else wb.active
         ws_back = wb[wb.sheetnames[sn.index('BACK')]] if 'BACK' in sn else (wb[wb.sheetnames[1]] if len(wb.sheetnames)>1 else wb.active)
@@ -125,8 +138,7 @@ def open_excel():
         safe_write(ws_front, 'BA23', s1.get('sy', ''))
         safe_write(ws_front, 'BK23', s1.get('semester', ''))
         
-        s1_subjects = s1.get('subjects', [])
-        for i, subj in enumerate(s1_subjects):
+        for i, subj in enumerate(s1.get('subjects', [])):
             row = 31 + i
             safe_write(ws_front, row, 1, subj.get('type', ''))
             safe_write(ws_front, row, 5, subj.get('subject', ''))
