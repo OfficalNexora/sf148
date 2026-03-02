@@ -124,11 +124,27 @@ try {
             admission_date: normalize(info.admissionDate),
             hs_school: normalize(eligibility.schoolName),
             hs_addr: normalize(eligibility.schoolAddress),
-            hs_ave: normalize(eligibility.hsGenAve),
             grad_date: normalize(eligibility.gradDate || certification.gradDate),
             cert_date: normalize(certification.certDate),
             cert_remarks: normalize(certification.remarks),
             date_issued: normalize(certification.dateIssued),
+
+            // Eligibility Checkboxes (returns 'X' if true)
+            hs_check: eligibility.hsCompleter ? 'X' : '',
+            jhs_check: eligibility.jhsCompleter ? 'X' : '',
+            pept_check: eligibility.pept ? 'X' : '',
+            als_check: eligibility.als ? 'X' : '',
+            others_check: eligibility.others ? 'X' : '',
+
+            // Eligibility Ratings/Dates
+            hs_ave: normalize(eligibility.hsGenAve),
+            jhs_ave: normalize(eligibility.jhsGenAve),
+            pept_rating: normalize(eligibility.peptRating),
+            als_rating: normalize(eligibility.alsRating),
+            exam_date: normalize(eligibility.examDate),
+            clc_name: normalize(eligibility.clcName),
+            others_spec: normalize(eligibility.othersSpec),
+
             // Compatibility aliases for existing templates
             lastname: normalize(info.lname),
             firstname: normalize(info.fname),
@@ -200,7 +216,7 @@ try {
     /**
      * Searches for a label text in the worksheet and writes to a cell relative to it.
      */
-    function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 16384) {
+    function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, anchorFromEnd = true, maxCol = 16384) {
         if (value === undefined || value === null || value === '') return false;
         if (!ws) return false;
 
@@ -213,14 +229,19 @@ try {
                 if (found) return;
                 const text = normalize(cell.value).toUpperCase();
                 if (text.includes(search)) {
-                    // If label is merged, anchor from merge-end so writes land in input cells.
+                    // If label is merged, we can anchor from start or end.
+                    // General inputs want to jump past the label (anchor from end).
+                    // Checkboxes want to tick the box to the left (anchor from start).
                     const merge = findMergeBounds(ws, cell.row, cell.col);
-                    const baseCol = merge ? merge.endCol : cell.col;
+                    const baseCol = (anchorFromEnd && merge) ? merge.endCol : cell.col;
+
                     const targetRow = cell.row + offsetRow;
                     const targetCol = baseCol + offsetCol;
-                    console.log(`Label [${label}] found at ${cell.address}. Writing to ${ws.getCell(targetRow, targetCol).address}`);
+
                     if (targetCol >= 1 && targetCol <= maxCol && targetRow >= 1) {
-                        ws.getCell(targetRow, targetCol).value = normalize(value);
+                        const targetCell = ws.getCell(targetRow, targetCol);
+                        console.log(`Label [${label}] found at ${cell.address}. Writing "${value}" to ${targetCell.address}`);
+                        targetCell.value = normalize(value);
                         found = true;
                     }
                 }
@@ -384,10 +405,23 @@ try {
             writeByLabel(front, 'DATE OF BIRTH', data.info?.birthdate, 1);
             writeByLabel(front, 'DATE OF SHS ADMISSION', data.info?.admissionDate, 1);
 
-            writeByLabel(front, 'GEN. AVE', data.eligibility?.hsGenAve);
+            // ELIGIBILITY Checkboxes (Offset -1 from START hits the box to the left)
+            if (data.eligibility?.hsCompleter) writeByLabel(front, 'High School Completer*', 'X', -1, 0, false);
+            if (data.eligibility?.jhsCompleter) writeByLabel(front, 'Junior High School Completer', 'X', -1, 0, false);
+            if (data.eligibility?.pept) writeByLabel(front, 'PEPT Passer**', 'X', -1, 0, false);
+            if (data.eligibility?.als) writeByLabel(front, 'ALS A&E Passer***', 'X', -1, 0, false);
+            if (data.eligibility?.others) writeByLabel(front, 'Others (Pls. Specify):', 'X', -1, 0, false);
+
+            writeByLabel(front, 'Gen. Ave', data.eligibility?.hsGenAve || data.eligibility?.jhsGenAve);
             writeByLabel(front, 'DATE OF GRADUATION', data.eligibility?.gradDate, 3);
             writeByLabel(front, 'NAME OF SCHOOL', data.eligibility?.schoolName, 2);
             writeByLabel(front, 'SCHOOL ADDRESS', data.eligibility?.schoolAddress, 1);
+
+            // Additional Eligibility Details
+            writeByLabel(front, 'Rating:', data.eligibility?.peptRating || data.eligibility?.alsRating);
+            writeByLabel(front, 'Date of Examination/Assessment', data.eligibility?.examDate);
+            writeByLabel(front, 'Name/Address of Community Learning Center', data.eligibility?.clcName);
+            writeByLabel(front, 'Specify):', data.eligibility?.othersSpec);
 
             // Sem 1 Start: Row 23, Subjects Start: Row 28
             fillSemesterInfo(front, 23, data.semester1);
