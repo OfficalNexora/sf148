@@ -5,10 +5,28 @@ function normalize(value) {
     return String(value);
 }
 
+function findMergeBounds(ws, row, col) {
+    if (!ws || !ws.model || !Array.isArray(ws.model.merges)) return null;
+    for (const ref of ws.model.merges) {
+        const [start, end] = ref.split(':');
+        const startCell = ws.getCell(start);
+        const endCell = ws.getCell(end);
+        if (
+            row >= startCell.row
+            && row <= endCell.row
+            && col >= startCell.col
+            && col <= endCell.col
+        ) {
+            return { endCol: endCell.col };
+        }
+    }
+    return null;
+}
+
 /**
  * Searches for a label text in the worksheet and writes to a cell relative to it.
  */
-function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 24) {
+function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 16384) {
     if (value === undefined || value === null || value === '') return false;
     if (!ws) return false;
 
@@ -22,9 +40,11 @@ function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 2
             if (found) return;
             const text = normalize(cell.value).toUpperCase();
             if (text.includes(search)) {
+                const merge = findMergeBounds(ws, cell.row, cell.col);
+                const baseCol = merge ? merge.endCol : cell.col;
                 const targetRow = cell.row + offsetRow;
-                const targetCol = cell.col + offsetCol;
-                if (targetCol <= maxCol + offsetCol) {
+                const targetCol = baseCol + offsetCol;
+                if (targetCol >= 1 && targetCol <= maxCol && targetRow >= 1) {
                     ws.getCell(targetRow, targetCol).value = normalize(value);
                     found = true;
                 }

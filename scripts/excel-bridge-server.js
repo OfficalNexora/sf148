@@ -21,16 +21,21 @@ const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
 const API_KEY = process.env.BRIDGE_API_KEY || '';
 const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
 
-// Priority: 1. ENV, 2. Current Folder (for portable EXE), 3. public/ folder
-const TEMPLATE_NAME = 'Form137_Template.xlsx';
+// Priority: 1. ENV, 2. Placeholder template, 3. Legacy template
+const TEMPLATE_CANDIDATE_NAMES = ['PLACEHOLDER(ALL).xlsx', 'Form137_Template.xlsx'];
 const POSSIBLE_PATHS = [
     process.env.BRIDGE_TEMPLATE_PATH,
-    path.join(process.cwd(), TEMPLATE_NAME),
-    path.join(__dirname, TEMPLATE_NAME),
-    path.join(process.cwd(), 'public', TEMPLATE_NAME),
-    path.join(__dirname, '..', 'public', TEMPLATE_NAME)
+    ...TEMPLATE_CANDIDATE_NAMES.flatMap((name) => ([
+        path.join(process.cwd(), name),
+        path.join(__dirname, name),
+        path.join(process.cwd(), 'public', name),
+        path.join(__dirname, '..', 'public', name),
+        path.join(process.cwd(), 'release', name),
+        path.join(__dirname, '..', 'release', name)
+    ]))
 ];
-const TEMPLATE_PATH = POSSIBLE_PATHS.find(p => p && fs.existsSync(p)) || POSSIBLE_PATHS[1];
+const TEMPLATE_PATH = POSSIBLE_PATHS.find(p => p && fs.existsSync(p))
+    || path.join(process.cwd(), TEMPLATE_CANDIDATE_NAMES[1]);
 
 const OUTPUT_DIR = process.env.BRIDGE_OUTPUT_DIR || path.join(os.tmpdir(), 'form137-exports');
 const STARTUP_LOG_FILE = path.join(process.cwd(), 'excel-bridge-startup.log');
@@ -68,10 +73,138 @@ function normalize(value) {
     return String(value);
 }
 
+function findMergeBounds(ws, row, col) {
+    if (!ws || !ws.model || !Array.isArray(ws.model.merges)) return null;
+    for (const ref of ws.model.merges) {
+        const [start, end] = ref.split(':');
+        const startCell = ws.getCell(start);
+        const endCell = ws.getCell(end);
+        if (
+            row >= startCell.row
+            && row <= endCell.row
+            && col >= startCell.col
+            && col <= endCell.col
+        ) {
+            return {
+                startCol: startCell.col,
+                endCol: endCell.col,
+                startRow: startCell.row,
+                endRow: endCell.row
+            };
+        }
+    }
+    return null;
+}
+
+function excelCellToString(value) {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') {
+        if (Array.isArray(value.richText)) return value.richText.map(part => part.text || '').join('');
+        if (typeof value.text === 'string') return value.text;
+        if (value.result !== undefined && value.result !== null) return excelCellToString(value.result);
+    }
+    return String(value);
+}
+
+function buildPlaceholderMap(data) {
+    const info = data?.info || {};
+    const eligibility = data?.eligibility || {};
+    const certification = data?.certification || {};
+    const semester1 = data?.semester1 || {};
+    const semester2 = data?.semester2 || {};
+    const semester3 = data?.semester3 || {};
+    const semester4 = data?.semester4 || {};
+
+    const placeholderMap = {
+        lname: normalize(info.lname),
+        fname: normalize(info.fname),
+        mname: normalize(info.mname),
+        lrn: normalize(info.lrn),
+        sex: normalize(info.sex),
+        birthdate: normalize(info.birthdate),
+        admission_date: normalize(info.admissionDate),
+        hs_school: normalize(eligibility.schoolName),
+        hs_addr: normalize(eligibility.schoolAddress),
+        hs_ave: normalize(eligibility.hsGenAve),
+        grad_date: normalize(eligibility.gradDate || certification.gradDate),
+        cert_date: normalize(certification.certDate),
+        cert_remarks: normalize(certification.remarks),
+        date_issued: normalize(certification.dateIssued),
+        // Compatibility aliases for existing templates
+        lastname: normalize(info.lname),
+        firstname: normalize(info.fname),
+        middlename: normalize(info.mname),
+        LRN: normalize(info.lrn),
+        'date of birth': normalize(info.birthdate),
+        dateofadmission: normalize(info.admissionDate),
+        genave: normalize(semester1.genAve),
+        track: normalize(certification.trackStrand || semester1.trackStrand),
+        strand: normalize(certification.trackStrand || semester1.trackStrand),
+        section: normalize(semester1.section),
+        shs_gen_ave: normalize(certification.genAve),
+        awards: normalize(certification.awards),
+        school_head: normalize(certification.schoolHead)
+    };
+
+    const semesters = [semester1, semester2, semester3, semester4];
+    semesters.forEach((sem, idx) => {
+        const sNum = idx + 1;
+        placeholderMap[`s${sNum}_school`] = normalize(sem.school);
+        placeholderMap[`s${sNum}_id`] = normalize(sem.schoolId);
+        placeholderMap[`s${sNum}_level`] = normalize(sem.gradeLevel);
+        placeholderMap[`s${sNum}_sy`] = normalize(sem.sy);
+        placeholderMap[`s${sNum}_sem`] = normalize(sem.semester || sem.sem);
+        placeholderMap[`s${sNum}_ave`] = normalize(sem.genAve);
+        placeholderMap[`s${sNum}_track`] = normalize(sem.trackStrand);
+        placeholderMap[`s${sNum}_section`] = normalize(sem.section);
+
+        (sem.subjects || []).forEach((subj, subjIdx) => {
+            const rowNum = subjIdx + 1;
+            placeholderMap[`s${sNum}sub_${rowNum}`] = normalize(subj?.subject);
+            placeholderMap[`s${sNum}q1_${rowNum}`] = normalize(subj?.q1);
+            placeholderMap[`s${sNum}q2_${rowNum}`] = normalize(subj?.q2);
+            placeholderMap[`s${sNum}fin_${rowNum}`] = normalize(subj?.final);
+            placeholderMap[`s${sNum}act_${rowNum}`] = normalize(subj?.action);
+        });
+    });
+
+    return placeholderMap;
+}
+
+function replacePlaceholders(workbook, data) {
+    const placeholderMap = buildPlaceholderMap(data);
+    const keys = Object.keys(placeholderMap);
+    if (!keys.length) return;
+
+    workbook.worksheets.forEach((ws) => {
+        ws.eachRow((row) => {
+            row.eachCell((cell) => {
+                const text = excelCellToString(cell.value);
+                if (!text || !text.includes('%(')) return;
+
+                let replaced = text;
+                keys.forEach((key) => {
+                    const token = `%(${key})`;
+                    if (replaced.includes(token)) {
+                        replaced = replaced.split(token).join(normalize(placeholderMap[key]));
+                    }
+                });
+
+                if (replaced !== text) {
+                    cell.value = replaced;
+                }
+            });
+        });
+    });
+}
+
 /**
  * Searches for a label text in the worksheet and writes to a cell relative to it.
  */
-function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 24) {
+function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 16384) {
     if (value === undefined || value === null || value === '') return false;
     if (!ws) return false;
 
@@ -84,11 +217,13 @@ function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 2
             if (found) return;
             const text = normalize(cell.value).toUpperCase();
             if (text.includes(search)) {
-                // ExcelJS column/row are 1-indexed
+                // If label is merged, anchor from merge-end so writes land in input cells.
+                const merge = findMergeBounds(ws, cell.row, cell.col);
+                const baseCol = merge ? merge.endCol : cell.col;
                 const targetRow = cell.row + offsetRow;
-                const targetCol = cell.col + offsetCol;
-                console.log(`Label [${label}] found at ${cell.address}. Writing to Col ${targetCol} Row ${targetRow}`);
-                if (targetCol <= maxCol + offsetCol) {
+                const targetCol = baseCol + offsetCol;
+                console.log(`Label [${label}] found at ${cell.address}. Writing to ${ws.getCell(targetRow, targetCol).address}`);
+                if (targetCol >= 1 && targetCol <= maxCol && targetRow >= 1) {
                     ws.getCell(targetRow, targetCol).value = normalize(value);
                     found = true;
                 }
@@ -237,29 +372,21 @@ async function createWorkbookFromTemplate(data) {
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(TEMPLATE_PATH);
+    replacePlaceholders(workbook, data);
 
     const sheets = workbook.worksheets;
     const front = sheets.find(s => s.name.toUpperCase().includes('FRONT')) || sheets[0];
     const back = sheets.find(s => s.name.toUpperCase().includes('BACK')) || sheets[1] || front;
 
     if (front) {
-        console.log('--- Front Sheet Structure (Rows 1-10) ---');
-        for (let i = 1; i <= 10; i++) {
-            const row = front.getRow(i);
-            const vals = [];
-            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-                const v = normalize(cell.value);
-                if (v) vals.push(`[${cell.address}]: "${v}"`);
-            });
-            if (vals.length) console.log(`Row ${i}: ${vals.join(' | ')}`);
-        }
         writeByLabel(front, 'LAST NAME', data.info?.lname);
         writeByLabel(front, 'FIRST NAME', data.info?.fname);
         writeByLabel(front, 'MIDDLE NAME', data.info?.mname);
         writeByLabel(front, 'LRN', data.info?.lrn);
         writeByLabel(front, 'SEX', data.info?.sex);
-        writeByLabel(front, 'DATE OF BIRTH', data.info?.birthdate, 3);
-        writeByLabel(front, 'DATE OF SHS ADMISSION', data.info?.admissionDate, 5);
+        // Using smaller offsets now that findMergeBounds handles skipping the label's merged columns
+        writeByLabel(front, 'DATE OF BIRTH', data.info?.birthdate, 1);
+        writeByLabel(front, 'DATE OF SHS ADMISSION', data.info?.admissionDate, 1);
 
         writeByLabel(front, 'GEN. AVE', data.eligibility?.hsGenAve);
         writeByLabel(front, 'DATE OF GRADUATION', data.eligibility?.gradDate, 3);
