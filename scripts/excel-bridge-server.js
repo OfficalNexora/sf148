@@ -335,18 +335,27 @@ async function handleOpenExcel(req, res) {
     }
 
     try {
+        console.log('Parsing request body...');
         const body = await parseBody(req);
+        console.log('Body keys:', Object.keys(body || {}));
         const data = body && body.data;
         if (!data || !data.info) {
+            console.error('Validation failed: Missing student data');
             return sendJson(res, 400, { success: false, error: 'Missing student data.' });
         }
 
         const autoPrint = Boolean(body && body.autoPrint);
         const openAfterPrint = body && body.openAfterPrint !== false;
 
+        console.log(`Generating workbook using template: ${TEMPLATE_PATH}`);
+        if (!fs.existsSync(TEMPLATE_PATH)) {
+            console.warn('Template not found! Falling back to summary sheet.');
+        }
+
         const workbook = await createWorkbookFromTemplate(data);
         const lastName = (data.info?.lname || 'Student').replace(/[^a-z0-9]/gi, '_');
         const filePath = path.join(OUTPUT_DIR, `Form137_${lastName}_${Date.now()}.xlsx`);
+        console.log(`Saving to: ${filePath}`);
 
         await workbook.xlsx.writeFile(filePath);
 
@@ -376,7 +385,8 @@ async function handleOpenExcel(req, res) {
 
         return sendJson(res, 200, { success: true, filePath, printed, warning });
     } catch (err) {
-        console.error('Bridge error:', err);
+        console.error('Bridge request error:', err.stack || err);
+        logToFile(`Request error: ${err.stack || err.message}`);
         return sendJson(res, 500, { success: false, error: err.message });
     }
 }
