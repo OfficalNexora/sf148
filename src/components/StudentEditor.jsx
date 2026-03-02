@@ -299,7 +299,35 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
             }
         }
 
-        newData[semKey].subjects[idx] = { ...newData[semKey].subjects[idx], [field]: processedValue };
+        const subj = { ...newData[semKey].subjects[idx], [field]: processedValue };
+
+        // --- AUTO CALCULATION ---
+        const q1 = parseInt(field === 'q1' ? processedValue : subj.q1);
+        const q2 = parseInt(field === 'q2' ? processedValue : subj.q2);
+
+        if (!isNaN(q1) && !isNaN(q2)) {
+            const final = Math.round((q1 + q2) / 2);
+            subj.final = final.toString();
+            subj.action = final >= 75 ? 'PASSED' : 'FAILED';
+        } else if (processedValue === '' && (field === 'q1' || field === 'q2')) {
+            // Clear calculations if quarters are cleared
+            subj.final = '';
+            subj.action = '';
+        }
+
+        newData[semKey].subjects[idx] = subj;
+
+        // --- AUTO CALC GEN AVE ---
+        const finalGrades = newData[semKey].subjects
+            .map(s => parseInt(s.final))
+            .filter(g => !isNaN(g));
+
+        if (finalGrades.length > 0) {
+            const sum = finalGrades.reduce((a, b) => a + b, 0);
+            const ave = (sum / finalGrades.length).toFixed(2);
+            newData[semKey].genAve = ave.endsWith('.00') ? Math.round(sum / finalGrades.length).toString() : ave;
+        }
+
         onChange(newData);
         scheduleAutoSave(newData);
     }, [data, onChange, scheduleAutoSave]);
@@ -317,7 +345,23 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
         newData[semKey] = { ...newData[semKey] };
         newData[semKey].remedial = { ...newData[semKey].remedial };
         newData[semKey].remedial.subjects = [...newData[semKey].remedial.subjects];
-        newData[semKey].remedial.subjects[idx] = { ...newData[semKey].remedial.subjects[idx], [field]: value };
+
+        const rs = { ...newData[semKey].remedial.subjects[idx], [field]: value };
+
+        // --- AUTO CALCULATION ---
+        const semGrade = parseInt(field === 'semGrade' ? value : rs.semGrade);
+        const remMark = parseInt(field === 'remedialMark' ? value : rs.remedialMark);
+
+        if (!isNaN(semGrade) && !isNaN(remMark)) {
+            const recomputed = Math.round((semGrade + remMark) / 2);
+            rs.recomputedGrade = recomputed.toString();
+            rs.action = recomputed >= 75 ? 'PASSED' : 'FAILED';
+        } else if (value === '' && (field === 'semGrade' || field === 'remedialMark')) {
+            rs.recomputedGrade = '';
+            rs.action = '';
+        }
+
+        newData[semKey].remedial.subjects[idx] = rs;
         onChange(newData);
         scheduleAutoSave(newData);
     }, [data, onChange, scheduleAutoSave]);
@@ -791,7 +835,7 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
 
                     <div className="gen-ave-row">
                         <label>General Average for the Semester:</label>
-                        <input value={sem.genAve} onChange={(e) => updateSem(semKey, 'genAve', e.target.value)} placeholder="—" />
+                        <input value={sem.genAve} readOnly placeholder="—" style={{ opacity: 0.8 }} />
                     </div>
 
                     <div className="form-grid full-span" style={{ marginTop: '16px' }}>
@@ -860,8 +904,8 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
                                             </td>
                                             <td><input className="grade-cell" value={rs.semGrade} onChange={(e) => updateRemSub(semKey, ri, 'semGrade', e.target.value)} placeholder="—" data-idx={ri} data-field="semGrade" onKeyDown={(e) => handleTableKeyDown(e, `remedial-${semKey}`)} /></td>
                                             <td><input className="grade-cell" value={rs.remedialMark} onChange={(e) => updateRemSub(semKey, ri, 'remedialMark', e.target.value)} placeholder="—" data-idx={ri} data-field="remedialMark" onKeyDown={(e) => handleTableKeyDown(e, `remedial-${semKey}`)} /></td>
-                                            <td><input className="grade-cell" value={rs.recomputedGrade} onChange={(e) => updateRemSub(semKey, ri, 'recomputedGrade', e.target.value)} placeholder="—" data-idx={ri} data-field="recomputedGrade" onKeyDown={(e) => handleTableKeyDown(e, `remedial-${semKey}`)} /></td>
-                                            <td><input className="grade-cell" value={rs.action} onChange={(e) => updateRemSub(semKey, ri, 'action', e.target.value)} placeholder="—" data-idx={ri} data-field="action" onKeyDown={(e) => handleTableKeyDown(e, `remedial-${semKey}`)} /></td>
+                                            <td><input className="grade-cell" value={rs.recomputedGrade} readOnly placeholder="—" tabindex="-1" style={{ opacity: 0.7 }} /></td>
+                                            <td><input className="grade-cell" value={rs.action} readOnly placeholder="—" tabindex="-1" style={{ opacity: 0.85, fontWeight: 600 }} /></td>
                                         </tr>
                                     ))}
                                 </tbody>
