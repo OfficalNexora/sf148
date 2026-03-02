@@ -290,14 +290,40 @@ try {
 
     function fillSemesterSubjects(sheet, startRow, subjects) {
         if (!sheet || !subjects || !Array.isArray(subjects)) return;
+
+        const typeMap = {
+            'CORE': 'Core',
+            'APPLIED': 'Applied',
+            'SPECIALIZED': 'Specialized',
+            'SPE': 'Specialized',
+            'SPEC': 'Specialized',
+            'APP': 'Applied'
+        };
+
         subjects.forEach((subj, idx) => {
             const r = startRow + idx;
             if (r > 2000) return;
-            writeToCellMergeAware(sheet, r, 1, subj.type || (idx + 1));
+
+            // Map type or fallback to index
+            let typeVal = subj.type || '';
+            const upperType = typeVal.toUpperCase();
+            if (typeMap[upperType]) {
+                typeVal = typeMap[upperType];
+            } else if (!typeVal) {
+                typeVal = idx + 1;
+            }
+
+            // Col A (1): Type
+            writeToCellMergeAware(sheet, r, 1, typeVal);
+            // Col E (5): Subject Name
             writeToCellMergeAware(sheet, r, 5, subj.subject);
+            // Col AT (46): Q1
             writeToCellMergeAware(sheet, r, 46, subj.q1);
+            // Col AY (51): Q2
             writeToCellMergeAware(sheet, r, 51, subj.q2);
+            // Col BD (56): Final
             writeToCellMergeAware(sheet, r, 56, subj.final);
+            // Col BI (61): Action
             writeToCellMergeAware(sheet, r, 61, subj.action || subj.actionTaken);
         });
     }
@@ -398,14 +424,14 @@ try {
             // Sem 1
             fillSemesterInfo(front, 23, data.semester1);
             const s1Table = findLabelPos(front, 'SUBJECTS', { start: 23, end: 40 });
-            if (s1Table) fillSemesterSubjects(front, s1Table.row + 3, data.semester1?.subjects);
+            if (s1Table) fillSemesterSubjects(front, s1Table.row + 2, data.semester1?.subjects);
 
             // Sem 2
             const s2Start = findLabelPos(front, 'SCHOOL:', { start: 40, end: 120 });
             if (s2Start) {
                 fillSemesterInfo(front, s2Start.row, data.semester2);
                 const s2Table = findLabelPos(front, 'SUBJECTS', { start: s2Start.row, end: s2Start.row + 20 });
-                if (s2Table) fillSemesterSubjects(front, s2Table.row + 3, data.semester2?.subjects);
+                if (s2Table) fillSemesterSubjects(front, s2Table.row + 2, data.semester2?.subjects);
             }
         }
         if (back) {
@@ -417,13 +443,13 @@ try {
             if (s3Start) {
                 fillSemesterInfo(back, s3Start.row, data.semester3);
                 const s3Table = findLabelPos(back, 'SUBJECTS', { start: s3Start.row, end: s3Start.row + 20 });
-                if (s3Table) fillSemesterSubjects(back, s3Table.row + 3, data.semester3?.subjects);
+                if (s3Table) fillSemesterSubjects(back, s3Table.row + 2, data.semester3?.subjects);
             }
             const s4Start = findLabelPos(back, 'SCHOOL:', { start: 30, end: 150 });
             if (s4Start) {
                 fillSemesterInfo(back, s4Start.row, data.semester4);
                 const s4Table = findLabelPos(back, 'SUBJECTS', { start: s4Start.row, end: s4Start.row + 20 });
-                if (s4Table) fillSemesterSubjects(back, s4Table.row + 3, data.semester4?.subjects);
+                if (s4Table) fillSemesterSubjects(back, s4Table.row + 2, data.semester4?.subjects);
             }
         }
         return workbook;
