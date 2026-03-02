@@ -87,6 +87,7 @@ function writeByLabel(ws, label, value, offsetCol = 1, offsetRow = 0, maxCol = 2
                 // ExcelJS column/row are 1-indexed
                 const targetRow = cell.row + offsetRow;
                 const targetCol = cell.col + offsetCol;
+                console.log(`Label [${label}] found at ${cell.address}. Writing to Col ${targetCol} Row ${targetRow}`);
                 if (targetCol <= maxCol + offsetCol) {
                     ws.getCell(targetRow, targetCol).value = normalize(value);
                     found = true;
