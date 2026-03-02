@@ -14,10 +14,14 @@ Write-Host "================================================" -ForegroundColor C
 
 # 0. Kill Zombie Processes
 Write-Host "Checking for existing processes..." -ForegroundColor Yellow
-$zombies = Get-Process -Name "excel-bridge-server", "ngrok" -ErrorAction SilentlyContinue
-if ($zombies) {
-    Write-Host "Cleaning up $($zombies.Count) existing processes..." -ForegroundColor Yellow
-    $zombies | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "excel-bridge-server" -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name "ngrok" -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# Also find and kill anything occupying port 8787 specifically
+$portProcess = Get-NetTCPConnection -LocalPort 8787 -ErrorAction SilentlyContinue
+if ($portProcess) {
+    Write-Host "Clearing port 8787 (PID: $($portProcess[0].OwningProcess))..." -ForegroundColor Cyan
+    Stop-Process -Id $portProcess[0].OwningProcess -Force -ErrorAction SilentlyContinue
 }
 
 # 1. Check if ngrok exists
@@ -68,6 +72,8 @@ try {
     Write-Host "Processes started in separate windows!" -ForegroundColor Green
     Write-Host "1. Bridge Server Window: Handles Excel logic."
     Write-Host "2. Ngrok Window: Provides your Public URL."
+    Write-Host ""
+    Write-Host "BRIDGE API KEY: $BridgeKey" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Monitoring... (Close THIS window to stop both)" -ForegroundColor White
     Write-Host "------------------------------------------------"
