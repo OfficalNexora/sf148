@@ -125,13 +125,11 @@ export async function generateExcelForm(data) {
             const workbook = new ExcelJS.Workbook();
 
             try {
+                // Some browsers/ExcelJS versions struggle with drawing anchors in templates.
                 await workbook.xlsx.load(arrayBuffer);
             } catch (loadErr) {
-                console.warn('Template load failed (likely drawing anchors bug), falling back to summary sheet:', loadErr);
-                const fallbackWb = new ExcelJS.Workbook();
-                buildSummarySheet(fallbackWb, data);
-                await triggerDownload(fallbackWb, `Form137_Summary_Fallback_${Date.now()}.xlsx`);
-                return { success: true };
+                console.error('High-fidelity template load failed:', loadErr);
+                throw new Error('Your browser struggled to process the complex design of the original template. Please ensure you are using the "Bridge Server" (Excel Tool) for the best results, or try a different browser.');
             }
 
             const sheets = workbook.worksheets;

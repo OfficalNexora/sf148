@@ -478,9 +478,9 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
                     const { generateExcelForm } = await import('../utils/excelGenerator');
                     const result = await generateExcelForm(data);
                     if (result.success) {
-                        alert('Excel downloaded successfully!\n\nAs you do not have a local Excel app configured, please upload the downloaded file to Google Sheets, Microsoft 365, or another online Excel viewer to open and print it.');
+                        alert('Design Notice: Since we couldn\'t connect to your local "Excel Bridge" tool, we generated a basic summary list instead.\n\nTo get the full branded Form 137 with logos and borders, please make sure your Bridge tool is running and refreshing the page.');
                     } else {
-                        alert(`Failed to generate Excel file.\nError: ${result.error}`);
+                        alert(`Failed to generate Excel file.\n\nNote: For high-fidelity design, please run the "Excel Bridge" tool on your laptop.\n\nError: ${result.error}`);
                     }
                 }
             } catch (e) {
