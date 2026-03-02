@@ -18,10 +18,17 @@ Get-Process -Name "excel-bridge-server" -ErrorAction SilentlyContinue | Stop-Pro
 Get-Process -Name "ngrok" -ErrorAction SilentlyContinue | Stop-Process -Force
 
 # Also find and kill anything occupying port 8787 specifically
-$portProcess = Get-NetTCPConnection -LocalPort 8787 -State Listen -ErrorAction SilentlyContinue
-if ($portProcess) {
-    Write-Host "Clearing port 8787 (PID: $($portProcess[0].OwningProcess))..." -ForegroundColor Cyan
-    Stop-Process -Id $portProcess[0].OwningProcess -Force -ErrorAction SilentlyContinue
+try {
+    $portProcesses = Get-NetTCPConnection -LocalPort 8787 -State Listen -ErrorAction SilentlyContinue
+    if ($null -ne $portProcesses) {
+        foreach ($p in $portProcesses) {
+            Write-Host "Clearing port 8787 (PID: $($p.OwningProcess))..." -ForegroundColor Cyan
+            Stop-Process -Id $p.OwningProcess -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+catch {
+    Write-Host "Note: Port 8787 check skipped (command not supported or no permission)." -ForegroundColor Gray
 }
 
 # COOLDOWN: Give the ngrok cloud a moment to realize the old session is dead
@@ -81,10 +88,10 @@ try {
         $ngrokProcess = Start-Process -FilePath $ngrokPath -ArgumentList $ngrokArgs -WorkingDirectory $scriptDir -PassThru
         
         Start-Sleep -Seconds 3
-        if ($ngrokProcess.HasExited) {
+        if ($null -ne $ngrokProcess -and $ngrokProcess.HasExited) {
             Write-Host "Ngrok failed to start (Code: $($ngrokProcess.ExitCode))." -ForegroundColor Red
         }
-        else {
+        elseif ($null -ne $ngrokProcess) {
             $success = $true
         }
     }
@@ -105,12 +112,12 @@ try {
 
     # Monitor
     while ($true) {
-        if ($bridgeProcess -and $bridgeProcess.HasExited) { 
+        if ($null -ne $bridgeProcess -and $bridgeProcess.HasExited) { 
             Write-Host "`n[!ERROR] Excel Bridge Server has stopped!" -ForegroundColor Red
             Write-Host "Exit Code: $($bridgeProcess.ExitCode)" -ForegroundColor Yellow
             throw "Bridge binary exited."
         }
-        if ($ngrokProcess -and $ngrokProcess.HasExited) { 
+        if ($null -ne $ngrokProcess -and $ngrokProcess.HasExited) { 
             Write-Host "`n[!ERROR] Ngrok has stopped!" -ForegroundColor Red
             Write-Host "Exit Code: $($ngrokProcess.ExitCode)" -ForegroundColor Yellow
             throw "Ngrok exited."
@@ -125,13 +132,13 @@ catch {
 }
 finally {
     Write-Host "`nCleaning up processes..." -ForegroundColor Yellow
-    if ($bridgeProcess -and -not $bridgeProcess.HasExited) { 
+    if ($null -ne $bridgeProcess -and -not $bridgeProcess.HasExited) { 
         Stop-Process -Id $bridgeProcess.Id -Force -ErrorAction SilentlyContinue 
     }
-    if ($ngrokProcess -and -not $ngrokProcess.HasExited) { 
+    if ($null -ne $ngrokProcess -and -not $ngrokProcess.HasExited) { 
         Stop-Process -Id $ngrokProcess.Id -Force -ErrorAction SilentlyContinue 
     }
     Write-Host "`nCleanup complete." -ForegroundColor Gray
-    Write-Host "Press any key to exit this window..." -ForegroundColor White
-    $null = [Console]::ReadKey()
+    Write-Host "Done. Press any key to exit."
+    cmd /c pause
 }
