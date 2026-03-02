@@ -74,13 +74,19 @@ try {
 
     # Monitor
     while ($true) {
-        if ($bridgeProcess.HasExited) { throw "Excel Bridge Server has stopped unexpectedly." }
+        if ($bridgeProcess.HasExited) { 
+            Write-Host "`n[ERROR] Excel Bridge Server has stopped unexpectedly." -ForegroundColor Red
+            Write-Host "Please check 'excel-bridge-startup.log' in this folder for details." -ForegroundColor Yellow
+            throw "Excel Bridge Server stopped."
+        }
         if ($ngrokProcess.HasExited) { throw "Ngrok has stopped unexpectedly." }
         Start-Sleep -Seconds 2
     }
 }
 catch {
-    Write-Host "`n[ERROR] $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.Exception.Message -notlike "*stopped*") {
+        Write-Host "`n[ERROR] $($_.Exception.Message)" -ForegroundColor Red
+    }
 }
 finally {
     Write-Host "`nCleaning up processes..." -ForegroundColor Yellow

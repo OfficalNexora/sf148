@@ -422,6 +422,9 @@ server.on('error', (error) => {
 
     logToFile(detail);
     if (hint) logToFile(`Hint: ${hint}`);
+
+    // CRITICAL: Exit so the launcher knows it failed
+    process.exit(1);
 });
 
 process.on('uncaughtException', (error) => {
@@ -429,6 +432,7 @@ process.on('uncaughtException', (error) => {
     console.error(detail);
     console.error(`Log file: ${STARTUP_LOG_FILE}`);
     logToFile(detail);
+    process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
@@ -436,8 +440,10 @@ process.on('unhandledRejection', (reason) => {
     console.error(detail);
     console.error(`Log file: ${STARTUP_LOG_FILE}`);
     logToFile(detail);
+    process.exit(1);
 });
 
+console.log('Starting server listener...');
 server.listen(PORT, HOST, () => {
     console.log('================================================');
     console.log('       SF10 EXCEL BRIDGE SERVER RUNNING         ');
