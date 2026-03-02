@@ -13,6 +13,12 @@ try {
     ExcelJS = require('exceljs');
     console.log('ExcelJS loaded successfully.');
 
+    function waitForEnter(exitCode = 1) {
+        console.log('\nPress Enter to exit...');
+        const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+        rl.on('line', () => process.exit(exitCode));
+    }
+
     const PORT = Number(process.env.BRIDGE_PORT || 8787);
     const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
     const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
@@ -575,7 +581,7 @@ try {
         if (API_KEY) {
             const provided = req.headers['x-bridge-key'];
             if (!provided || provided !== API_KEY) {
-                return sendJson(res, 401, { success: false, error: 'Unauthorized.' });
+                return sendJson(req, res, 401, { success: false, error: 'Unauthorized.' });
             }
         }
 
@@ -586,7 +592,7 @@ try {
             const data = body && body.data;
             if (!data || !data.info) {
                 console.error('Validation failed: Missing student data');
-                return sendJson(res, 400, { success: false, error: 'Missing student data.' });
+                return sendJson(req, res, 400, { success: false, error: 'Missing student data.' });
             }
 
             const autoPrint = Boolean(body && body.autoPrint);
@@ -642,7 +648,7 @@ try {
     const server = http.createServer(async (req, res) => {
         try {
             if (req.method === 'OPTIONS') {
-                setCors(res);
+                setCors(req, res);
                 res.writeHead(204);
                 res.end();
                 return;
@@ -691,8 +697,7 @@ try {
         logToFile(detail);
         if (hint) logToFile(`Hint: ${hint}`);
 
-        // CRITICAL: Exit so the launcher knows it failed
-        process.exit(1);
+        waitForEnter(1);
     });
 
     process.on('uncaughtException', (error) => {
@@ -700,7 +705,7 @@ try {
         console.error(detail);
         console.error(`Log file: ${STARTUP_LOG_FILE}`);
         logToFile(detail);
-        process.exit(1);
+        waitForEnter(1);
     });
 
     process.on('unhandledRejection', (reason) => {
@@ -708,7 +713,7 @@ try {
         console.error(detail);
         console.error(`Log file: ${STARTUP_LOG_FILE}`);
         logToFile(detail);
-        process.exit(1);
+        waitForEnter(1);
     });
 
     console.log('Starting server listener...');
