@@ -8,7 +8,7 @@ python -m pip install -r scripts/requirements.txt
 
 # 2. Build EXE using PyInstaller
 Write-Host "Building standalone executable..." -ForegroundColor Yellow
-python -m PyInstaller --onefile --noconsole --distpath release scripts/excel-bridge-server.py
+python -m PyInstaller --onefile --distpath release scripts/excel-bridge-server.py
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`nSUCCESS: release/excel-bridge-server.exe updated!" -ForegroundColor Green
