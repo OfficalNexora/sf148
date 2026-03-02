@@ -233,6 +233,46 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
         scheduleAutoSave(newData);
     }, [data, onChange, scheduleAutoSave]);
 
+    /**
+     * Helper to navigate dynamic tables via arrow keys/Enter
+     */
+    const handleTableKeyDown = useCallback((e, sectionKey) => {
+        const { key, target } = e;
+        const idx = parseInt(target.getAttribute('data-idx'));
+        const field = target.getAttribute('data-field');
+        if (isNaN(idx) || !field) return;
+
+        const row = target.closest('tr');
+        if (!row) return;
+
+        if (key === 'Enter' || key === 'ArrowDown') {
+            e.preventDefault();
+            const nextRow = row.nextElementSibling;
+            if (nextRow) {
+                const nextInput = nextRow.querySelector(`[data-field="${field}"]`);
+                if (nextInput) nextInput.focus();
+            } else if (key === 'Enter') {
+                // Auto-add row on Enter at the end of semester subjects
+                if (sectionKey.startsWith('semester')) addSubject(sectionKey);
+            }
+        } else if (key === 'ArrowUp') {
+            e.preventDefault();
+            const prevRow = row.previousElementSibling;
+            if (prevRow) {
+                const prevInput = prevRow.querySelector(`[data-field="${field}"]`);
+                if (prevInput) prevInput.focus();
+            }
+        } else if (key === 'ArrowRight' && target.selectionEnd === target.value.length) {
+            const focusables = Array.from(row.querySelectorAll('input, select')).filter(el => !el.readOnly);
+            const currIdx = focusables.indexOf(target);
+            if (currIdx < focusables.length - 1) focusables[currIdx + 1].focus();
+        } else if (key === 'ArrowLeft' && target.selectionStart === 0) {
+            const focusables = Array.from(row.querySelectorAll('input, select')).filter(el => !el.readOnly);
+            const currIdx = focusables.indexOf(target);
+            if (currIdx > 0) focusables[currIdx - 1].focus();
+        }
+    }, [data, onChange]);
+
     const updateSem = useCallback((semKey, field, value) => {
         const newData = { ...data, [semKey]: { ...data[semKey], [field]: value } };
         onChange(newData);
@@ -798,6 +838,8 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
                                                 <select
                                                     value={rs.type}
                                                     onChange={(e) => updateRemSub(semKey, ri, 'type', e.target.value)}
+                                                    data-idx={ri} data-field="type"
+                                                    onKeyDown={(e) => handleTableKeyDown(e, `remedial-${semKey}`)}
                                                 >
                                                     <option value="">—</option>
                                                     <option value="Core">Core</option>
@@ -812,12 +854,14 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
                                                     onChange={(e) => updateRemSub(semKey, ri, 'subject', e.target.value)}
                                                     placeholder="Subject name"
                                                     list={rs.type ? `annex-subjects-${rs.type.toLowerCase()}` : 'annex-subjects-all'}
+                                                    data-idx={ri} data-field="subject"
+                                                    onKeyDown={(e) => handleTableKeyDown(e, `remedial-${semKey}`)}
                                                 />
                                             </td>
-                                            <td><input className="grade-cell" value={rs.semGrade} onChange={(e) => updateRemSub(semKey, ri, 'semGrade', e.target.value)} placeholder="—" /></td>
-                                            <td><input className="grade-cell" value={rs.remedialMark} onChange={(e) => updateRemSub(semKey, ri, 'remedialMark', e.target.value)} placeholder="—" /></td>
-                                            <td><input className="grade-cell" value={rs.recomputedGrade} onChange={(e) => updateRemSub(semKey, ri, 'recomputedGrade', e.target.value)} placeholder="—" /></td>
-                                            <td><input className="grade-cell" value={rs.action} onChange={(e) => updateRemSub(semKey, ri, 'action', e.target.value)} placeholder="—" /></td>
+                                            <td><input className="grade-cell" value={rs.semGrade} onChange={(e) => updateRemSub(semKey, ri, 'semGrade', e.target.value)} placeholder="—" data-idx={ri} data-field="semGrade" onKeyDown={(e) => handleTableKeyDown(e, `remedial-${semKey}`)} /></td>
+                                            <td><input className="grade-cell" value={rs.remedialMark} onChange={(e) => updateRemSub(semKey, ri, 'remedialMark', e.target.value)} placeholder="—" data-idx={ri} data-field="remedialMark" onKeyDown={(e) => handleTableKeyDown(e, `remedial-${semKey}`)} /></td>
+                                            <td><input className="grade-cell" value={rs.recomputedGrade} onChange={(e) => updateRemSub(semKey, ri, 'recomputedGrade', e.target.value)} placeholder="—" data-idx={ri} data-field="recomputedGrade" onKeyDown={(e) => handleTableKeyDown(e, `remedial-${semKey}`)} /></td>
+                                            <td><input className="grade-cell" value={rs.action} onChange={(e) => updateRemSub(semKey, ri, 'action', e.target.value)} placeholder="—" data-idx={ri} data-field="action" onKeyDown={(e) => handleTableKeyDown(e, `remedial-${semKey}`)} /></td>
                                         </tr>
                                     ))}
                                 </tbody>

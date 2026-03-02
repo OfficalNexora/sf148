@@ -52,14 +52,16 @@ try {
         }
     }
 
-    function setCors(res) {
-        res.setHeader('Access-Control-Allow-Origin', ALLOW_ORIGIN);
+    function setCors(req, res) {
+        const origin = req.headers.origin || ALLOW_ORIGIN;
+        res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Bridge-Key');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Bridge-Key,ngrok-skip-browser-warning');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
     }
 
-    function sendJson(res, code, payload) {
-        setCors(res);
+    function sendJson(req, res, code, payload) {
+        setCors(req, res);
         res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(payload));
     }
@@ -295,6 +297,31 @@ try {
         });
     }
 
+    function fillRemedialInfo(sheet, startRow, remedial) {
+        if (!sheet || !remedial) return;
+
+        // Remedial header details
+        if (remedial.from || remedial.to) {
+            const period = `Conducted from ${remedial.from || ''} to ${remedial.to || ''}`;
+            // Find where remedial header starts (usually row after final average)
+            // But for now we use the startRow passed from caller
+        }
+
+        (remedial.subjects || []).forEach((subj, idx) => {
+            const r = startRow + idx;
+            // Col I (9): Subject
+            sheet.getCell(r, 9).value = normalize(subj.subject);
+            // Col BD (56): Sem Final
+            sheet.getCell(r, 56).value = normalize(subj.semGrade);
+            // Col BI (61): Remedial Mark
+            sheet.getCell(r, 61).value = normalize(subj.remedialMark);
+            // Col BN (66): Recomputed
+            sheet.getCell(r, 66).value = normalize(subj.recomputedGrade);
+            // Col BS (71): Action
+            sheet.getCell(r, 71).value = normalize(subj.action);
+        });
+    }
+
     /**
      * Fixes a common ExcelJS error: "Shared Formula master must exist above and or left of clone"
      * by converting shared formulas into regular formulas just before saving.
@@ -445,6 +472,16 @@ try {
             // Sem 4 Start: Row 46, Subjects Start: Row 51
             fillSemesterInfo(back, 46, data.semester4);
             fillSemesterSubjects(back, 51, data.semester4?.subjects);
+
+            // Remedial Sections (Offsets from respective semester blocks)
+            // Sem 1 Remedial: Row 55 on Front
+            fillRemedialInfo(front, 55, data.semester1?.remedial);
+            // Sem 2 Remedial: Row 98 on Front (Assuming 98 based on similar spacing)
+            fillRemedialInfo(front, 98, data.semester2?.remedial);
+            // Sem 3 Remedial: Row 37 on Back
+            fillRemedialInfo(back, 37, data.semester3?.remedial);
+            // Sem 4 Remedial: Row 78 on Back
+            fillRemedialInfo(back, 78, data.semester4?.remedial);
         }
 
         return workbook;
@@ -596,9 +633,9 @@ try {
 
             return sendJson(res, 200, { success: true, filePath, printed, warning });
         } catch (err) {
-            console.error('Bridge request error:', err.stack || err);
+            console.error('Bridge request error:', err);
             logToFile(`Request error: ${err.stack || err.message}`);
-            return sendJson(res, 500, { success: false, error: err.message });
+            return sendJson(req, res, 500, { success: false, error: err.message });
         }
     }
 
@@ -612,7 +649,7 @@ try {
             }
 
             if (req.method === 'GET' && req.url === '/health') {
-                return sendJson(res, 200, {
+                return sendJson(req, res, 200, {
                     success: true,
                     service: 'excel-bridge',
                     host: HOST,
@@ -625,10 +662,10 @@ try {
                 return;
             }
 
-            return sendJson(res, 404, { success: false, error: 'Not found.' });
+            return sendJson(req, res, 404, { success: false, error: 'Not found.' });
         } catch (err) {
             console.error('Server error:', err);
-            return sendJson(res, 500, { success: false, error: err.message });
+            return sendJson(req, res, 500, { success: false, error: err.message });
         }
     });
 
