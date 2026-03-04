@@ -97,7 +97,7 @@ def write_remedial_row(ws, r, rd):
     safe_write(ws, f'BI{r}', empty_to_none(rd.get('action', '')))
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, allow_headers=["Content-Type", "X-Bridge-Key", "ngrok-skip-browser-warning"])
 
 @app.route('/health', methods=['GET'])
 def health():

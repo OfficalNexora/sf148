@@ -19,6 +19,7 @@ export async function openExcelViaBridge(data, options = {}) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true',
                 ...(apiKey ? { 'X-Bridge-Key': apiKey } : {})
             },
             body: JSON.stringify(requestBody)
