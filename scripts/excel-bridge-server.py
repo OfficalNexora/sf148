@@ -4,7 +4,7 @@ import json
 import time
 import datetime
 import subprocess
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -109,8 +109,11 @@ def open_excel():
         return jsonify({"success": False, "error": "Unauthorized"}), 401
     try:
         body = request.get_json(); data = body.get('data', {}); info = data.get('info', {}); eligibility = data.get('eligibility', {}); cert = data.get('certification', {})
+        return_file = body.get('returnFile', False)
         log_it(f"Exporting: {info.get('lname', 'Unknown')}")
-        if not os.path.exists(TEMPLATE_PATH): return jsonify({"success": False, "error": "Template missing"}), 500
+        if not os.path.exists(TEMPLATE_PATH):
+            log_it(f"ERR: Template missing at {TEMPLATE_PATH}")
+            return jsonify({"success": False, "error": "Template missing"}), 500
         wb = openpyxl.load_workbook(TEMPLATE_PATH); sn = [s.upper() for s in wb.sheetnames]
         ws_front = wb[wb.sheetnames[sn.index('FRONT')]] if 'FRONT' in sn else wb.active
         ws_back = wb[wb.sheetnames[sn.index('BACK')]] if 'BACK' in sn else (wb[wb.sheetnames[1]] if len(wb.sheetnames)>1 else wb.active)
@@ -284,6 +287,18 @@ def open_excel():
         
         filename = f"SF10_{str(info.get('lname','Student')).replace(' ','_')}_{int(time.time())}.xlsx"
         output_path = os.path.join(OUTPUT_DIR, filename); wb.save(output_path)
+        
+        # If the web client explicitly requests the binary file back automatically
+        if return_file:
+            # We skip os.startfile and just ship the file out over HTTP
+            return send_file(
+                output_path,
+                as_attachment=True,
+                download_name=filename,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            
+        # Desktop behavior: open it locally on the bridge machine
         if sys.platform == 'win32': os.startfile(output_path)
         return jsonify({"success": True, "filePath": output_path})
     except Exception as e:

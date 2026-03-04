@@ -616,13 +616,17 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
                     }
                 } else {
                     // Web Browser Environment (Vercel):
-                    // Generate and download the Excel file entirely in the browser using exceljs
-                    const { generateExcelFromTemplate } = await import('../utils/excelTemplateFiller');
-                    const result = await generateExcelFromTemplate(printData);
-                    if (result.success) {
-                        if (showAlert) await showAlert(`Excel file downloaded perfectly!\n\nFilename: ${result.filename}`);
+                    // Ping the host Python bridge, but demand the binary file back instead of it opening on the host
+                    const { openExcelViaBridge } = await import('../services/excelBridgeClient');
+                    const bridgeResult = await openExcelViaBridge(printData, {
+                        returnFile: true
+                    });
+
+                    if (bridgeResult.success) {
+                        setIsPrinting(false);
+                        return;
                     } else {
-                        if (showAlert) await showAlert(`Failed to generate Web Excel file.\n\nError: ${result.error}`);
+                        if (showAlert) await showAlert(`Failed to download from Host Bridge.\n\nPlease ensure the Python Bridge is running on the host machine.\n\nError: ${bridgeResult.error}`);
                     }
                 }
             } catch (e) {
