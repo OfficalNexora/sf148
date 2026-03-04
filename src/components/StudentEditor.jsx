@@ -616,19 +616,7 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
                     }
                 } else {
                     // Web Browser Environment (Vercel):
-                    // 1) try local bridge server (desktop auto-open), 2) fallback to browser download.
-                    const { openExcelViaBridge } = await import('../services/excelBridgeClient');
-                    const bridgeResult = await openExcelViaBridge(printData, {
-                        autoPrint: true,
-                        openAfterPrint: true
-                    });
-                    if (bridgeResult.success && !bridgeResult.warning) {
-                        // Fully successful bridge print
-                        setIsPrinting(false);
-                        return;
-                    }
-
-                    // Fallback to purely generating and downloading the Excel file in the browser
+                    // Generate and download the Excel file entirely in the browser using exceljs
                     const { generateExcelFromTemplate } = await import('../utils/excelTemplateFiller');
                     const result = await generateExcelFromTemplate(printData);
                     if (result.success) {
