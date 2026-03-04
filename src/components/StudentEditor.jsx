@@ -376,9 +376,21 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
             const ave = rawAve.toFixed(2);
             newData[semKey].genAve = ave.endsWith('.00') ? Math.round(rawAve).toString() : ave;
             newData[semKey].genAction = rawAve >= 75 ? 'PASSED' : 'FAILED';
+
+            // --- AUTO CALC HONORS ---
+            if (rawAve >= 98) {
+                newData[semKey].award = 'WITH HIGHEST HONORS';
+            } else if (rawAve >= 95) {
+                newData[semKey].award = 'WITH HIGH HONORS';
+            } else if (rawAve >= 90) {
+                newData[semKey].award = 'WITH HONORS';
+            } else {
+                newData[semKey].award = '';
+            }
         } else {
             newData[semKey].genAve = '';
             newData[semKey].genAction = '';
+            newData[semKey].award = '';
         }
 
         onChange(newData);
@@ -1021,6 +1033,30 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
                                 color: sem.genAction === 'PASSED' ? '#4ade80' : sem.genAction === 'FAILED' ? '#f87171' : undefined
                             }}
                         />
+
+                        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <label style={{ fontWeight: '600', color: '#93c5fd' }}>Award/Honor Received:</label>
+                            <select
+                                value={sem.award || ''}
+                                onChange={(e) => updateSem(semKey, 'award', e.target.value)}
+                                style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '6px',
+                                    border: '1px solid rgba(147, 197, 253, 0.3)',
+                                    background: 'rgba(30, 41, 59, 0.7)',
+                                    color: '#fff',
+                                    fontSize: '13px',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    minWidth: '200px'
+                                }}
+                            >
+                                <option value="">None</option>
+                                <option value="WITH HONORS">WITH HONORS</option>
+                                <option value="WITH HIGH HONORS">WITH HIGH HONORS</option>
+                                <option value="WITH HIGHEST HONORS">WITH HIGHEST HONORS</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div className="form-grid full-span" style={{ marginTop: '16px' }}>
