@@ -26,8 +26,8 @@ const SearchIcon = () => (
 const TABS = [
     { key: 'info', label: 'Learner Info', icon: <UserIcon /> },
     { key: 'eligibility', label: 'Eligibility', icon: <CheckIcon /> },
-    { key: 'front', label: 'Front Page (Grade 11)', icon: <BookIcon /> },
-    { key: 'back', label: 'Back Page (Grade 12)', icon: <BookIcon /> },
+    { key: 'front', label: 'Front (Grade 11)', icon: <BookIcon /> },
+    { key: 'back', label: 'Back (Grade 12)', icon: <BookIcon /> },
     { key: 'annex', label: 'Annex (Master List)', icon: <SearchIcon /> },
     { key: 'certification', label: 'Certification', icon: <GradIcon /> }
 ];
@@ -226,8 +226,32 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
     }, [onSave]);
 
     // ── Generic updaters ──
+    const validateDate = (field, value) => {
+        // Only validate if it looks like a date field
+        const f = field.toLowerCase();
+        if (f.includes('date') || f === 'dob' || f === 'from' || f === 'to') {
+            if (!value) return true;
+            // Handle both YYYY-MM-DD (input type date) and MM/DD/YYYY formats
+            let yearStr = '';
+            if (value.includes('-')) yearStr = value.split('-')[0];
+            else if (value.includes('/')) {
+                const parts = value.split('/');
+                yearStr = parts[parts.length - 1];
+            }
+
+            if (yearStr && yearStr.length === 4) {
+                const year = parseInt(yearStr, 10);
+                if (year > 2050 || year < 1920) {
+                    if (showAlert) showAlert(`Invalid year: ${year}. Please enter a realistic date between 1920 and 2050.`);
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
 
     const update = useCallback((section, field, value) => {
+        if (!validateDate(field, value)) return;
         const newData = { ...data, [section]: { ...data[section], [field]: value } };
         onChange(newData);
         scheduleAutoSave(newData);
@@ -274,6 +298,7 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
     }, [data, onChange]);
 
     const updateSem = useCallback((semKey, field, value) => {
+        if (!validateDate(field, value)) return;
         const newData = { ...data, [semKey]: { ...data[semKey], [field]: value } };
         onChange(newData);
         scheduleAutoSave(newData);
@@ -452,11 +477,30 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
         scheduleAutoSave(newData);
     }, [data, onChange, scheduleAutoSave]);
 
+    const updateAnnexSub = useCallback((idx, field, value) => {
+        const newData = { ...data };
+        const newAnnex = [...(newData.annex || Array(36).fill(null).map((_, i) => ({
+            type: i < 15 ? 'Core' : i < 22 ? 'Applied' : i < 31 ? 'Specialized' : 'Other',
+            subject: '',
+            active: true
+        })))];
+
+        newAnnex[idx] = { ...newAnnex[idx], [field]: value };
+        newData.annex = newAnnex;
+        onChange(newData);
+        scheduleAutoSave(newData);
+    }, [data, onChange, scheduleAutoSave]);
+
     // ── Utility Helpers ──
 
-    const loadTemplateSubjects = useCallback(() => {
+    const loadTemplateSubjects = useCallback(async () => {
         if ((data.annex || []).some(a => a.subject && a.subject.trim() !== '')) {
-            if (!window.confirm('This will overwrite your current Annex Master List with the default K-12 subjects. Continue?')) return;
+            if (showConfirm) {
+                const confirmed = await showConfirm('This will overwrite your current Annex Master List with the default K-12 subjects. Continue?');
+                if (!confirmed) return;
+            } else {
+                if (!window.confirm('This will overwrite your current Annex Master List with the default K-12 subjects. Continue?')) return;
+            }
         }
 
         const core = K12_TEMPLATE_SUBJECTS.Core || [];
@@ -480,10 +524,15 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
         const newData = { ...data, annex: newAnnex };
         onChange(newData);
         scheduleAutoSave(newData);
-    }, [data, onChange, scheduleAutoSave]);
+    }, [data, onChange, scheduleAutoSave, showConfirm]);
 
-    const clearGrades = useCallback((semKey) => {
-        if (!window.confirm('Are you sure you want to clear ALL grades for this semester? Subjects will remain.')) return;
+    const clearGrades = useCallback(async (semKey) => {
+        if (showConfirm) {
+            const confirmed = await showConfirm('Are you sure you want to clear ALL grades for this semester? Subjects will remain.');
+            if (!confirmed) return;
+        } else {
+            if (!window.confirm('Are you sure you want to clear ALL grades for this semester? Subjects will remain.')) return;
+        }
         const newData = { ...data };
         newData[semKey] = { ...newData[semKey] };
         newData[semKey].subjects = newData[semKey].subjects.map(s => ({
@@ -493,21 +542,26 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
         newData[semKey].remarks = '';
         onChange(newData);
         scheduleAutoSave(newData);
-    }, [data, onChange, scheduleAutoSave]);
+    }, [data, onChange, scheduleAutoSave, showConfirm]);
 
-    const copyFromPrevious = useCallback((semKey) => {
+    const copyFromPrevious = useCallback(async (semKey) => {
         const semNum = parseInt(semKey.replace('semester', ''));
         if (semNum <= 1) return;
         const prevSemKey = `semester${semNum - 1}`;
         const prevSem = data[prevSemKey];
 
         if (!prevSem || prevSem.subjects.length === 0) {
-            alert('No subjects found in the previous semester to copy from.');
+            if (showAlert) showAlert('No subjects found in the previous semester to copy from.');
             return;
         }
 
         if (data[semKey].subjects.length > 0 && data[semKey].subjects[0].subject !== '') {
-            if (!window.confirm('This will append subjects from the previous semester. Continue?')) return;
+            if (showConfirm) {
+                const confirmed = await showConfirm('This will append subjects from the previous semester. Continue?');
+                if (!confirmed) return;
+            } else {
+                if (!window.confirm('This will append subjects from the previous semester. Continue?')) return;
+            }
         }
 
         const newData = { ...data };
@@ -526,7 +580,7 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
 
         onChange(newData);
         scheduleAutoSave(newData);
-    }, [data, onChange, scheduleAutoSave]);
+    }, [data, onChange, scheduleAutoSave, showAlert, showConfirm]);
 
     const autoPopulateFromStrand = useCallback(async (semKey) => {
         const strand = data[semKey].trackStrand?.toUpperCase() || '';
@@ -749,13 +803,17 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
     const renderSemester = (semKey) => {
         const sem = data[semKey];
         if (!sem) return null;
-        const semLabel = semKey.replace('semester', 'Semester ');
+
+        const semNum = parseInt(semKey.replace('semester', ''));
+        const gradeLevel = semNum <= 2 ? '11' : '12';
+        const semesterLabel = (semNum % 2 !== 0) ? '1st Semester' : '2nd Semester';
+        const semTitle = `Grade ${gradeLevel} - ${semesterLabel}`;
 
         return (
             <>
                 <div className="editor-section">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                        <h3 style={{ margin: 0 }}><span className="section-icon"><BookIcon /></span> {semLabel} — School & Section Info</h3>
+                        <h3 style={{ margin: 0 }}><span className="section-icon"><BookIcon /></span> {semTitle} — School & Section Info</h3>
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <button
                                 className="btn-secondary"
@@ -811,14 +869,25 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
                             </select>
                         </div>
                         <Field label="School Year" value={sem.sy} onInput={(v) => updateSem(semKey, 'sy', v)} placeholder="e.g. 2024-2025" />
-                        <Field label="Semester" value={sem.sem} onInput={(v) => updateSem(semKey, 'sem', v)} placeholder="e.g. 1st or 2nd" />
+                        <div className="field-group">
+                            <label>Semester</label>
+                            <select
+                                value={sem.sem || ''}
+                                onChange={(e) => updateSem(semKey, 'sem', e.target.value)}
+                                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', background: 'var(--bg-card)', color: 'white' }}
+                            >
+                                <option value="">Select</option>
+                                <option value="1ST">1ST</option>
+                                <option value="2ND">2ND</option>
+                            </select>
+                        </div>
                         <Field label="Track / Strand" value={sem.trackStrand} onInput={(v) => updateSem(semKey, 'trackStrand', v)} placeholder="e.g. TVL - ICT" />
                         <Field label="Section" value={sem.section} onInput={(v) => updateSem(semKey, 'section', v)} placeholder="e.g. Section Turing" />
                     </div>
                 </div>
 
                 <div className="editor-section">
-                    <h3><span className="section-icon"><BookIcon /></span> {semLabel} — Scholastic Record</h3>
+                    <h3><span className="section-icon"><BookIcon /></span> {semTitle} — Scholastic Record</h3>
 
                     {/* Type-filtered datalists — one per subject type */}
                     {['Core', 'Applied', 'Specialized', 'Other', 'All'].map(type => (
@@ -968,7 +1037,7 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
                 {/* Remedial Classes */}
                 <div className="editor-section">
                     <div className="remedial-section" style={{ borderTop: 'none', paddingTop: 0, marginTop: 0 }}>
-                        <h4>⚠ Remedial Classes — {semLabel}</h4>
+                        <h4>⚠ Remedial Classes — {semTitle}</h4>
 
                         <div className="form-grid">
                             <Field label="Conducted From (MM/DD/YYYY)" value={sem.remedial.from} onInput={(v) => updateRem(semKey, 'from', v)} type="date" />
