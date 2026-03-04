@@ -25,8 +25,17 @@ export const generateExcelFromTemplate = async (data) => {
         const arrayBuffer = await response.arrayBuffer();
 
         // 2. Load into ExcelJS
+        // Note: The template contains complex "Shared Formulas" (for genAve, remarks, etc).
+        // ExcelJS sometimes crashes trying to map shared formulas if the master cell isn't perfectly top-left.
+        // Since we process Gen Ave in Javascript anyway, we can instruct exceljs to ignore formula nodes
+        // during parsing to ensure stability without losing the visual template styling.
         const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(arrayBuffer);
+        await workbook.xlsx.load(arrayBuffer, {
+            ignoreNodes: [
+                'worksheet>extLst',
+                'worksheet>sheetData>row>c>f' // Strips formula blocks to prevent "Shared Formula master must exist" crashes
+            ]
+        });
 
         const wsFront = workbook.getWorksheet('FRONT') || workbook.worksheets[0];
         const wsBack = workbook.getWorksheet('BACK') || (workbook.worksheets.length > 1 ? workbook.worksheets[1] : workbook.worksheets[0]);
