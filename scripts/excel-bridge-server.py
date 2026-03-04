@@ -47,13 +47,9 @@ def log_it(msg):
         pass
 
 # --- HELPER: SAFE WRITE ---
-def safe_write(ws, row_or_coord, col_or_val, val=None):
-    if val is None:
-        coord = str(row_or_coord).upper()
-        write_val = col_or_val
-    else:
-        coord = f"{get_column_letter(col_or_val)}{row_or_coord}"
-        write_val = val
+def safe_write(ws, coord, write_val):
+    """Write a value to an Excel cell. Use None to clear the cell."""
+    coord = str(coord).upper()
     try:
         ws[coord] = write_val
     except AttributeError:
@@ -63,6 +59,42 @@ def safe_write(ws, row_or_coord, col_or_val, val=None):
                 ws.cell(row=merged_range.min_row, column=merged_range.min_col).value = write_val
                 return
         log_it(f"Failed write: {coord}")
+
+def to_num(val):
+    """Convert grade string to int for Excel formulas. Returns None if empty (truly clears cell)."""
+    if val is None or val == '':
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return val
+
+def empty_to_none(val):
+    """Convert empty strings to None so Excel cells are truly cleared."""
+    if val is None or val == '':
+        return None
+    return val
+
+def write_subject_row(ws, r, d):
+    """Write a single subject row. Uses None to truly clear unused cells."""
+    safe_write(ws, f'A{r}', empty_to_none(d.get('type', '')))
+    safe_write(ws, f'I{r}', empty_to_none(d.get('subject', '')))
+    safe_write(ws, f'AT{r}', to_num(d.get('q1', '')))
+    safe_write(ws, f'AY{r}', to_num(d.get('q2', '')))
+    safe_write(ws, f'BD{r}', to_num(d.get('final', '')))
+    safe_write(ws, f'BI{r}', empty_to_none(d.get('action', '')))
+
+def write_remedial_row(ws, r, rd):
+    """Write a single remedial subject row. Uses None to truly clear unused cells."""
+    safe_write(ws, f'A{r}', empty_to_none(rd.get('type', '')))
+    safe_write(ws, f'I{r}', empty_to_none(rd.get('subject', '')))
+    safe_write(ws, f'AT{r}', to_num(rd.get('semGrade', '')))
+    safe_write(ws, f'AY{r}', to_num(rd.get('remedialMark', '')))
+    safe_write(ws, f'BD{r}', to_num(rd.get('recomputedGrade', '')))
+    safe_write(ws, f'BI{r}', empty_to_none(rd.get('action', '')))
 
 app = Flask(__name__)
 CORS(app)
@@ -110,124 +142,145 @@ def open_excel():
         s1 = data.get('semester1', {})
         safe_write(ws_front, 'E23', s1.get('school', '')); safe_write(ws_front, 'AF23', s1.get('schoolId', ''))
         safe_write(ws_front, 'AS23', s1.get('gradeLevel', '')); safe_write(ws_front, 'BA23', s1.get('sy', ''))
-        safe_write(ws_front, 'BK23', s1.get('semester', '')); safe_write(ws_front, 'G24', s1.get('trackStrand', ''))
-        safe_write(ws_front, 'BC24', s1.get('section', ''))
+        safe_write(ws_front, 'BK23', s1.get('sem', '')); safe_write(ws_front, 'G25', s1.get('trackStrand', ''))
+        safe_write(ws_front, 'AS25', s1.get('section', ''))
 
         sub1 = s1.get('subjects', [])
-        for i, r in enumerate(range(31, 42)): # 15 rows
+        for i, r in enumerate(range(31, 43)): # 11 rows
             d = sub1[i] if i < len(sub1) else {}
-            if d:
-                safe_write(ws_front, f'A{r}', d.get('type','')); safe_write(ws_front, f'I{r}', d.get('subject',''))
-                safe_write(ws_front, f'AT{r}', d.get('q1','')); safe_write(ws_front, f'AY{r}', d.get('q2',''))
-                safe_write(ws_front, f'BD{r}', d.get('final','')); safe_write(ws_front, f'BI{r}', d.get('action',''))
+            write_subject_row(ws_front, r, d if d else {})
 
-        safe_write(ws_front, 'BD46', s1.get('genAve', ''))
-        safe_write(ws_front, 'A47', s1.get('remarks', ''))
+        # Gen Ave: write our calculated value (template formula is unreliable)
+        safe_write(ws_front, 'BD43', to_num(s1.get('genAve', '')))
+        safe_write(ws_front, 'E45', s1.get('remarks', ''))
+        # --- Signatory (Sem 1) --- PLACEHOLDER CELLS, calibrate as needed
+        safe_write(ws_front, 'A49', s1.get('adviserName', ''))
+        safe_write(ws_front, 'Y49', s1.get('certName', ''))
+        safe_write(ws_front, 'AZ49', s1.get('dateChecked', ''))
 
         r1 = s1.get('remedial', {})
         if r1:
-            safe_write(ws_front, 'K50', r1.get('from', '')); safe_write(ws_front, 'U50', r1.get('to', ''))
-            safe_write(ws_front, 'AF50', r1.get('school', '')); safe_write(ws_front, 'BA50', r1.get('schoolId', ''))
-            for i, r in enumerate(range(52, 57)): # 5 remedial rows
-                rd = r1.get('subjects', [])[i] if i < len(r1.get('subjects', [])) else {}
-                if rd:
-                    safe_write(ws_front, f'I{r}', rd.get('subject',''))
-                    safe_write(ws_front, f'AT{r}', rd.get('semGrade','')); safe_write(ws_front, f'AY{r}', rd.get('remedialMark',''))
-                    safe_write(ws_front, f'BD{r}', rd.get('recomputedGrade','')); safe_write(ws_front, f'BI{r}', rd.get('action',''))
+            safe_write(ws_front, 'S52', r1.get('from', '')); safe_write(ws_front, 'AC52', r1.get('to', ''))
+            safe_write(ws_front, 'AL52', r1.get('school', '')); safe_write(ws_front, 'BK52', r1.get('schoolId', ''))
+            rem_subs1 = r1.get('subjects', [])
+            for i, r in enumerate(range(58, 63)): # 5 remedial rows
+                rd = rem_subs1[i] if i < len(rem_subs1) else {}
+                write_remedial_row(ws_front, r, rd if rd else {})
+            # Remedial teacher/signature — PLACEHOLDER CELLS, calibrate as needed
+            safe_write(ws_front, 'J63', r1.get('teacherName', ''))
+            safe_write(ws_front, 'AY63', r1.get('signature', ''))
 
         # --- SEMESTER 2 (G11 - SEM 2) ---
         s2 = data.get('semester2', {})
-        safe_write(ws_front, 'E60', s2.get('school', '')); safe_write(ws_front, 'AF60', s2.get('schoolId', ''))
-        safe_write(ws_front, 'AS60', s2.get('gradeLevel', '')); safe_write(ws_front, 'BA60', s2.get('sy', ''))
-        safe_write(ws_front, 'BK60', s2.get('semester', '')); safe_write(ws_front, 'G61', s2.get('trackStrand', ''))
-        safe_write(ws_front, 'BC61', s2.get('section', ''))
+        safe_write(ws_front, 'E66', s2.get('school', '')); safe_write(ws_front, 'AF66', s2.get('schoolId', ''))
+        safe_write(ws_front, 'AS66', s2.get('gradeLevel', '')); safe_write(ws_front, 'BA66', s2.get('sy', ''))
+        safe_write(ws_front, 'BK66', s2.get('sem', '')); safe_write(ws_front, 'G68', s2.get('trackStrand', ''))
+        safe_write(ws_front, 'AS68', s2.get('section', ''))
 
         sub2 = s2.get('subjects', [])
-        for i, r in enumerate(range(68, 83)): # 15 rows
+        for i, r in enumerate(range(74, 86)): # 11 rows
             d = sub2[i] if i < len(sub2) else {}
-            if d:
-                safe_write(ws_front, f'A{r}', d.get('type','')); safe_write(ws_front, f'I{r}', d.get('subject',''))
-                safe_write(ws_front, f'AT{r}', d.get('q1','')); safe_write(ws_front, f'AY{r}', d.get('q2',''))
-                safe_write(ws_front, f'BD{r}', d.get('final','')); safe_write(ws_front, f'BI{r}', d.get('action',''))
+            write_subject_row(ws_front, r, d if d else {})
 
-        safe_write(ws_front, 'BD83', s2.get('genAve', ''))
-        safe_write(ws_front, 'A84', s2.get('remarks', ''))
+        # Gen Ave: write our calculated value (template formula is unreliable)
+        safe_write(ws_front, 'BD86', to_num(s2.get('genAve', '')))
+        safe_write(ws_front, 'F88', s2.get('remarks', ''))
+        # --- Signatory (Sem 2) --- PLACEHOLDER CELLS, calibrate as needed
+        safe_write(ws_front, 'A92', s2.get('adviserName', ''))
+        safe_write(ws_front, 'Y92', s2.get('certName', ''))
+        safe_write(ws_front, 'AZ92', s2.get('dateChecked', ''))
 
         r2 = s2.get('remedial', {})
         if r2:
-            safe_write(ws_front, 'K87', r2.get('from', '')); safe_write(ws_front, 'U87', r2.get('to', ''))
-            safe_write(ws_front, 'AF87', r2.get('school', '')); safe_write(ws_front, 'BA87', r2.get('schoolId', ''))
-            for i, r in enumerate(range(89, 94)): 
-                rd = r2.get('subjects', [])[i] if i < len(r2.get('subjects', [])) else {}
-                if rd:
-                    safe_write(ws_front, f'I{r}', rd.get('subject',''))
-                    safe_write(ws_front, f'AT{r}', rd.get('semGrade','')); safe_write(ws_front, f'AY{r}', rd.get('remedialMark',''))
-                    safe_write(ws_front, f'BD{r}', rd.get('recomputedGrade','')); safe_write(ws_front, f'BI{r}', rd.get('action',''))
+            safe_write(ws_front, 'S95', r2.get('from', '')); safe_write(ws_front, 'AC95', r2.get('to', ''))
+            safe_write(ws_front, 'AL95', r2.get('school', '')); safe_write(ws_front, 'BK95', r2.get('schoolId', ''))
+            rem_subs2 = r2.get('subjects', [])
+            for i, r in enumerate(range(101, 106)): # 5 remedial rows
+                rd = rem_subs2[i] if i < len(rem_subs2) else {}
+                write_remedial_row(ws_front, r, rd if rd else {})
+            # Remedial teacher/signature — PLACEHOLDER CELLS, calibrate as needed
+            safe_write(ws_front, 'J106', r2.get('teacherName', ''))
+            safe_write(ws_front, 'AY106', r2.get('signature', ''))
 
         # ==========================================================
         # GRADE 12 (BACK PAGE)
         # ==========================================================
         
-        # --- SEMESTER 3 (G12 - SEM 1) ---
+        # --- SEMESTER 3k (G12 - SEM 1) ---
         s3 = data.get('semester3', {})
-        safe_write(ws_back, 'E23', s3.get('school', '')); safe_write(ws_back, 'AF23', s3.get('schoolId', ''))
-        safe_write(ws_back, 'AS23', s3.get('gradeLevel', '')); safe_write(ws_back, 'BA23', s3.get('sy', ''))
-        safe_write(ws_back, 'BK23', s3.get('semester', '')); safe_write(ws_back, 'G24', s3.get('trackStrand', ''))
-        safe_write(ws_back, 'BC24', s3.get('section', ''))
+        safe_write(ws_back, 'E4', s3.get('school', '')); safe_write(ws_back, 'AF4', s3.get('schoolId', ''))
+        safe_write(ws_back, 'AS4', s3.get('gradeLevel', '')); safe_write(ws_back, 'BA4', s3.get('sy', ''))
+        safe_write(ws_back, 'BK4', s3.get('sem', '')); safe_write(ws_back, 'G5', s3.get('trackStrand', ''))
+        safe_write(ws_back, 'AS5', s3.get('section', ''))
 
         sub3 = s3.get('subjects', [])
-        for i, r in enumerate(range(31, 46)):
+        for i, r in enumerate(range(11, 23)):
             d = sub3[i] if i < len(sub3) else {}
-            if d:
-                safe_write(ws_back, f'A{r}', d.get('type','')); safe_write(ws_back, f'I{r}', d.get('subject',''))
-                safe_write(ws_back, f'AT{r}', d.get('q1','')); safe_write(ws_back, f'AY{r}', d.get('q2',''))
-                safe_write(ws_back, f'BD{r}', d.get('final','')); safe_write(ws_back, f'BI{r}', d.get('action',''))
+            write_subject_row(ws_back, r, d if d else {})
 
-        safe_write(ws_back, 'BD46', s3.get('genAve', ''))
-        safe_write(ws_back, 'A47', s3.get('remarks', ''))
+        # Gen Ave: write our calculated value (template formula is unreliable)
+        safe_write(ws_back, 'BD23', to_num(s3.get('genAve', '')))
+        safe_write(ws_back, 'F25', s3.get('remarks', ''))
+        # --- Signatory (Sem 3) --- PLACEHOLDER CELLS, calibrate as needed
+        safe_write(ws_back, 'A29', s3.get('adviserName', ''))
+        safe_write(ws_back, 'Y29', s3.get('certName', ''))
+        safe_write(ws_back, 'AZ29', s3.get('dateChecked', ''))
 
         r3 = s3.get('remedial', {})
         if r3:
-            safe_write(ws_back, 'K50', r3.get('from', '')); safe_write(ws_back, 'U50', r3.get('to', ''))
-            safe_write(ws_back, 'AF50', r3.get('school', '')); safe_write(ws_back, 'BA50', r3.get('schoolId', ''))
-            for i, r in enumerate(range(52, 57)):
-                rd = r3.get('subjects', [])[i] if i < len(r3.get('subjects', [])) else {}
-                if rd:
-                    safe_write(ws_back, f'I{r}', rd.get('subject',''))
-                    safe_write(ws_back, f'AT{r}', rd.get('semGrade','')); safe_write(ws_back, f'AY{r}', rd.get('remedialMark',''))
-                    safe_write(ws_back, f'BD{r}', rd.get('recomputedGrade','')); safe_write(ws_back, f'BI{r}', rd.get('action',''))
+            safe_write(ws_back, 'S32', r3.get('from', '')); safe_write(ws_back, 'AC32', r3.get('to', ''))
+            safe_write(ws_back, 'AL32', r3.get('school', '')); safe_write(ws_back, 'BK32', r3.get('schoolId', ''))
+            rem_subs3 = r3.get('subjects', [])
+            for i, r in enumerate(range(38, 42)): # Q5-Q6 remedial rows
+                rd = rem_subs3[i] if i < len(rem_subs3) else {}
+                write_remedial_row(ws_back, r, rd if rd else {})
+            # Remedial teacher/signature — PLACEHOLDER CELLS, calibrate as needed
+            safe_write(ws_back, 'J43', r3.get('teacherName', ''))
+            safe_write(ws_back, 'AY43', r3.get('signature', ''))
 
         # --- SEMESTER 4 (G12 - SEM 2) ---
         s4 = data.get('semester4', {})
-        safe_write(ws_back, 'E60', s4.get('school', '')); safe_write(ws_back, 'AF60', s4.get('schoolId', ''))
-        safe_write(ws_back, 'AS60', s4.get('gradeLevel', '')); safe_write(ws_back, 'BA60', s4.get('sy', ''))
-        safe_write(ws_back, 'BK60', s4.get('semester', '')); safe_write(ws_back, 'G61', s4.get('trackStrand', ''))
-        safe_write(ws_back, 'BC61', s4.get('section', ''))
+        safe_write(ws_back, 'E46', s4.get('school', '')); safe_write(ws_back, 'AF46', s4.get('schoolId', ''))
+        safe_write(ws_back, 'AS46', s4.get('gradeLevel', '')); safe_write(ws_back, 'BA46', s4.get('sy', ''))
+        safe_write(ws_back, 'BK46', s4.get('sem', '')); safe_write(ws_back, 'G48', s4.get('trackStrand', ''))
+        safe_write(ws_back, 'BC48', s4.get('section', ''))
 
         sub4 = s4.get('subjects', [])
-        for i, r in enumerate(range(68, 83)):
+        for i, r in enumerate(range(54, 66)):
             d = sub4[i] if i < len(sub4) else {}
-            if d:
-                safe_write(ws_back, f'A{r}', d.get('type','')); safe_write(ws_back, f'I{r}', d.get('subject',''))
-                safe_write(ws_back, f'AT{r}', d.get('q1','')); safe_write(ws_back, f'AY{r}', d.get('q2',''))
-                safe_write(ws_back, f'BD{r}', d.get('final','')); safe_write(ws_back, f'BI{r}', d.get('action',''))
+            write_subject_row(ws_back, r, d if d else {})
 
-        safe_write(ws_back, 'BD83', s4.get('genAve', ''))
-        safe_write(ws_back, 'A84', s4.get('remarks', ''))
+        # Gen Ave: write our calculated value (template formula is unreliable)
+        safe_write(ws_back, 'BD66', to_num(s4.get('genAve', '')))
+        safe_write(ws_back, 'F68', s4.get('remarks', ''))
+        # --- Signatory (Sem 4) --- PLACEHOLDER CELLS, calibrate as needed
+        safe_write(ws_back, 'A72', s4.get('adviserName', ''))
+        safe_write(ws_back, 'Y72', s4.get('certName', ''))
+        safe_write(ws_back, 'AZ72', s4.get('dateChecked', ''))
 
         r4 = s4.get('remedial', {})
         if r4:
-            safe_write(ws_back, 'K87', r4.get('from', '')); safe_write(ws_back, 'U87', r4.get('to', ''))
-            safe_write(ws_back, 'AF87', r4.get('school', '')); safe_write(ws_back, 'BA87', r4.get('schoolId', ''))
-            for i, r in enumerate(range(89, 94)):
-                rd = r4.get('subjects', [])[i] if i < len(r4.get('subjects', [])) else {}
-                if rd:
-                    safe_write(ws_back, f'I{r}', rd.get('subject',''))
-                    safe_write(ws_back, f'AT{r}', rd.get('semGrade','')); safe_write(ws_back, f'AY{r}', rd.get('remedialMark',''))
-                    safe_write(ws_back, f'BD{r}', rd.get('recomputedGrade','')); safe_write(ws_back, f'BI{r}', rd.get('action',''))
+            safe_write(ws_back, 'S75', r4.get('from', '')); safe_write(ws_back, 'AC75', r4.get('to', ''))
+            safe_write(ws_back, 'AL75', r4.get('school', '')); safe_write(ws_back, 'BK75', r4.get('schoolId', ''))
+            rem_subs4 = r4.get('subjects', [])
+            for i, r in enumerate(range(81, 85)): # 5 remedial rows
+                rd = rem_subs4[i] if i < len(rem_subs4) else {}
+                write_remedial_row(ws_back, r, rd if rd else {})
+            # Remedial teacher/signature — PLACEHOLDER CELLS, calibrate as needed
+            safe_write(ws_back, 'I86', r4.get('teacherName', ''))
+            safe_write(ws_back, 'AY86', r4.get('signature', ''))
 
         # --- CERTIFICATION ---
-        safe_write(ws_back, 'G270', cert.get('gradDate', '')); safe_write(ws_back, 'G274', cert.get('genAve', '')); safe_write(ws_back, 'L270', cert.get('schoolHead', ''))
+        # Existing
+        safe_write(ws_back, 'BI91', cert.get('gradDate', ''))
+        safe_write(ws_back, 'BJ90', cert.get('genAve', ''))
+        safe_write(ws_back, 'A94', cert.get('schoolHead', ''))
+        # Missing fields - PLACEHOLDER CELLS, calibrate as needed
+        safe_write(ws_back, 'I90', cert.get('trackStrand', ''))
+        safe_write(ws_back, 'I91', cert.get('awards', ''))
+        safe_write(ws_back, 'A112', cert.get('remarks', ''))
+        safe_write(ws_back, 'T94', cert.get('certDate', ''))
+        safe_write(ws_back, 'J114', cert.get('dateIssued', ''))
         
         filename = f"SF10_{str(info.get('lname','Student')).replace(' ','_')}_{int(time.time())}.xlsx"
         output_path = os.path.join(OUTPUT_DIR, filename); wb.save(output_path)

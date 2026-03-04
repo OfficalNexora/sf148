@@ -205,7 +205,7 @@ function Form137Preview({ data }) {
     );
 }
 
-function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
+function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAlert, showConfirm }) {
     const [activeTab, setActiveTab] = useState('info');
     const [isPrinting, setIsPrinting] = useState(false);
     const [showChecker, setShowChecker] = useState(false);
@@ -285,6 +285,29 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
         // Performance optimization: don't update if value hasn't changed
         if (data[semKey].subjects[idx][field] === value) return;
 
+        const rowData = data[semKey].subjects[idx];
+
+        // 1. Block Subject/Grade input if `type` is empty.
+        if (field !== 'type' && !rowData.type) {
+            if (showAlert) showAlert('Please select a Subject Type (Core, Applied, etc.) first.');
+            return;
+        }
+
+        // 2. Block Grade input if `subject` is empty.
+        if (['q1', 'q2', 'final'].includes(field) && !rowData.subject) {
+            if (showAlert) showAlert('Please enter a Subject Name before entering grades.');
+            return;
+        }
+
+        // 3. Prevent duplicate subjects in the same semester.
+        if (field === 'subject' && value.trim() !== '') {
+            const isDuplicate = data[semKey].subjects.some((s, i) => i !== idx && s.subject.toLowerCase() === value.toLowerCase());
+            if (isDuplicate) {
+                if (showAlert) showAlert('This subject is already added in this semester.');
+                return;
+            }
+        }
+
         const newData = { ...data };
         newData[semKey] = { ...newData[semKey] };
         newData[semKey].subjects = [...newData[semKey].subjects];
@@ -324,8 +347,13 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
 
         if (finalGrades.length > 0) {
             const sum = finalGrades.reduce((a, b) => a + b, 0);
-            const ave = (sum / finalGrades.length).toFixed(2);
-            newData[semKey].genAve = ave.endsWith('.00') ? Math.round(sum / finalGrades.length).toString() : ave;
+            const rawAve = sum / finalGrades.length;
+            const ave = rawAve.toFixed(2);
+            newData[semKey].genAve = ave.endsWith('.00') ? Math.round(rawAve).toString() : ave;
+            newData[semKey].genAction = rawAve >= 75 ? 'PASSED' : 'FAILED';
+        } else {
+            newData[semKey].genAve = '';
+            newData[semKey].genAction = '';
         }
 
         onChange(newData);
@@ -341,6 +369,26 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
     }, [data, onChange, scheduleAutoSave]);
 
     const updateRemSub = useCallback((semKey, idx, field, value) => {
+        const rowData = data[semKey].remedial.subjects[idx];
+
+        // 1. Only FAILED subjects in this semester can be added to Remedial.
+        if (field === 'subject' && value.trim() !== '') {
+            const failedSubjects = data[semKey].subjects.filter(s => s.action === 'FAILED').map(s => s.subject.toLowerCase());
+            if (!failedSubjects.includes(value.toLowerCase())) {
+                if (showAlert) showAlert('You can only enroll subjects that FAILED in this specific semester.');
+                return;
+            }
+        }
+
+        // 2. Prevent grades >= 75 from being added to Remedial (semGrade).
+        if (field === 'semGrade' && value !== '') {
+            const num = parseInt(value, 10);
+            if (!isNaN(num) && num >= 75) {
+                if (showAlert) showAlert('Remedial previous grades must be below 75.');
+                return;
+            }
+        }
+
         const newData = { ...data };
         newData[semKey] = { ...newData[semKey] };
         newData[semKey].remedial = { ...newData[semKey].remedial };
@@ -480,7 +528,7 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
         scheduleAutoSave(newData);
     }, [data, onChange, scheduleAutoSave]);
 
-    const autoPopulateFromStrand = useCallback((semKey) => {
+    const autoPopulateFromStrand = useCallback(async (semKey) => {
         const strand = data[semKey].trackStrand?.toUpperCase() || '';
         let matchedKey = null;
 
@@ -490,12 +538,12 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
         });
 
         if (!matchedKey) {
-            alert(`Could not find a curriculum template matching "${strand}".\n\nTry entering a standard strand like STEM, HUMSS, GAS, or TVL in the field above.`);
+            if (showAlert) await showAlert(`Could not find a curriculum template matching "${strand}".\n\nTry entering a standard strand like STEM, HUMSS, GAS, or TVL in the field above.`);
             return;
         }
 
         if (data[semKey].subjects.length > 0 && data[semKey].subjects[0].subject !== '') {
-            if (!window.confirm(`This will add the standard ${matchedKey} subjects to your list. Continue?`)) return;
+            if (showConfirm && !await showConfirm(`This will add the standard ${matchedKey} subjects to your list. Continue?`)) return;
         }
 
         const newData = { ...data };
@@ -515,8 +563,8 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
         scheduleAutoSave(newData);
     }, [data, onChange, scheduleAutoSave]);
 
-    const clearAllSubjects = useCallback((semKey) => {
-        if (!window.confirm('Delete ALL subjects for this semester? This cannot be undone.')) return;
+    const clearAllSubjects = useCallback(async (semKey) => {
+        if (showConfirm && !await showConfirm('Delete ALL subjects for this semester? This cannot be undone.')) return;
         const newData = { ...data };
         newData[semKey] = { ...newData[semKey] };
         newData[semKey].subjects = [{ ...EMPTY_SUBJECT }];
@@ -531,20 +579,46 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
         setIsPrinting(true);
         setTimeout(async () => {
             try {
+                // Format dates to MM/DD/YYYY to match Excel template expectations
+                const formatDateToMMDDYYYY = (dateStr) => {
+                    if (!dateStr) return '';
+                    const parts = dateStr.split('-');
+                    if (parts.length === 3) return `${parts[1]}/${parts[2]}/${parts[0]}`;
+                    return dateStr;
+                };
+
+                const printData = JSON.parse(JSON.stringify(data));
+                printData.info.birthdate = formatDateToMMDDYYYY(printData.info.birthdate);
+                printData.info.admissionDate = formatDateToMMDDYYYY(printData.info.admissionDate);
+                printData.eligibility.gradDate = formatDateToMMDDYYYY(printData.eligibility.gradDate);
+                printData.eligibility.examDate = formatDateToMMDDYYYY(printData.eligibility.examDate);
+                printData.certification.gradDate = formatDateToMMDDYYYY(printData.certification.gradDate);
+                printData.certification.certDate = formatDateToMMDDYYYY(printData.certification.certDate);
+                printData.certification.dateIssued = formatDateToMMDDYYYY(printData.certification.dateIssued);
+                ['semester1', 'semester2', 'semester3', 'semester4'].forEach(sem => {
+                    if (printData[sem]) {
+                        printData[sem].dateChecked = formatDateToMMDDYYYY(printData[sem].dateChecked);
+                        if (printData[sem].remedial) {
+                            printData[sem].remedial.from = formatDateToMMDDYYYY(printData[sem].remedial.from);
+                            printData[sem].remedial.to = formatDateToMMDDYYYY(printData[sem].remedial.to);
+                        }
+                    }
+                });
+
                 // Safe check for Electron environment
                 const renderer = window.ipcRenderer || (window.electron && window.electron.ipcRenderer);
 
                 if (renderer) {
                     // Desktop App Environment (Supports Auto-Open)
-                    const result = await renderer.invoke('print-excel-form', data);
+                    const result = await renderer.invoke('print-excel-form', printData);
                     if (!result.success) {
-                        alert('Failed to generate Excel file: ' + result.error);
+                        if (showAlert) await showAlert('Failed to generate Excel file: ' + result.error);
                     }
                 } else {
                     // Web Browser Environment (Vercel):
                     // 1) try local bridge server (desktop auto-open), 2) fallback to browser download.
                     const { openExcelViaBridge } = await import('../services/excelBridgeClient');
-                    const bridgeResult = await openExcelViaBridge(data, {
+                    const bridgeResult = await openExcelViaBridge(printData, {
                         autoPrint: true,
                         openAfterPrint: true
                     });
@@ -560,15 +634,15 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
 
                     // Fallback to purely generating and downloading the Excel file in the browser
                     const { generateExcelForm } = await import('../utils/excelGenerator');
-                    const result = await generateExcelForm(data);
+                    const result = await generateExcelForm(printData);
                     if (result.success) {
-                        alert('Design Notice: Since we couldn\'t connect to your local "Excel Bridge" tool, we generated a basic summary list instead.\n\nTo get the full branded Form 137 with logos and borders, please make sure your Bridge tool is running and refreshing the page.');
+                        if (showAlert) await showAlert('Design Notice: Since we couldn\'t connect to your local "Excel Bridge" tool, we generated a basic summary list instead.\n\nTo get the full branded Form 137 with logos and borders, please make sure your Bridge tool is running and refreshing the page.');
                     } else {
-                        alert(`Failed to generate Excel file.\n\nNote: For high-fidelity design, please run the "Excel Bridge" tool on your laptop.\n\nError: ${result.error}`);
+                        if (showAlert) await showAlert(`Failed to generate Excel file.\n\nNote: For high-fidelity design, please run the "Excel Bridge" tool on your laptop.\n\nError: ${result.error}`);
                     }
                 }
             } catch (e) {
-                alert('Error printing: ' + e.message);
+                if (showAlert) await showAlert('Error printing: ' + e.message);
             }
             setIsPrinting(false);
         }, 50);
@@ -583,9 +657,20 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
                 <Field label="Last Name" value={data.info.lname} onInput={(v) => update('info', 'lname', v)} placeholder="e.g. Dela Cruz" />
                 <Field label="First Name" value={data.info.fname} onInput={(v) => update('info', 'fname', v)} placeholder="e.g. Juan" />
                 <Field label="Middle Name" value={data.info.mname} onInput={(v) => update('info', 'mname', v)} placeholder="e.g. Santos" />
-                <Field label="LRN (Learner Reference Number)" value={data.info.lrn} onInput={(v) => update('info', 'lrn', v)} placeholder="12-digit LRN" />
+                <Field label="LRN (Learner Reference Number)" value={data.info.lrn} onInput={(v) => { const num = v.replace(/[^0-9]/g, ''); if (num.length <= 12) update('info', 'lrn', num); }} placeholder="12-digit LRN" />
                 <Field label="Date of Birth (MM/DD/YYYY)" value={data.info.birthdate} onInput={(v) => update('info', 'birthdate', v)} type="date" />
-                <Field label="Sex" value={data.info.sex} onInput={(v) => update('info', 'sex', v)} placeholder="Male / Female" />
+                <div className="field-group">
+                    <label>Sex</label>
+                    <select
+                        value={data.info.sex || ''}
+                        onChange={(e) => update('info', 'sex', e.target.value)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', background: 'var(--bg-card)', color: 'white' }}
+                    >
+                        <option value="">Select</option>
+                        <option value="MALE">MALE</option>
+                        <option value="FEMALE">FEMALE</option>
+                    </select>
+                </div>
                 <div className="field-group">
                     <label>Status</label>
                     <div className="checkbox-row" onClick={() => update('info', 'irregular', !data.info.irregular)}>
@@ -703,9 +788,40 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
                         </div>
                     </div>
                     <div className="form-grid">
-                        <Field label="School" value={sem.school} onInput={(v) => updateSem(semKey, 'school', v)} placeholder="e.g. Capas Senior High School" />
-                        <Field label="School ID" value={sem.schoolId} onInput={(v) => updateSem(semKey, 'schoolId', v)} placeholder="e.g. 306252" />
-                        <Field label="Grade Level" value={sem.gradeLevel} onInput={(v) => updateSem(semKey, 'gradeLevel', v)} placeholder="e.g. 11 or 12" />
+                        <Field
+                            label="School"
+                            value={sem.school}
+                            onInput={(v) => updateSem(semKey, 'school', v)}
+                            onFocus={() => {
+                                if (!sem.school && semKey !== 'semester1' && data.semester1.school) {
+                                    updateSem(semKey, 'school', data.semester1.school);
+                                }
+                            }}
+                            placeholder="e.g. Capas Senior High School"
+                        />
+                        <Field
+                            label="School ID"
+                            value={sem.schoolId}
+                            onInput={(v) => updateSem(semKey, 'schoolId', v)}
+                            onFocus={() => {
+                                if (!sem.schoolId && semKey !== 'semester1' && data.semester1.schoolId) {
+                                    updateSem(semKey, 'schoolId', data.semester1.schoolId);
+                                }
+                            }}
+                            placeholder="e.g. 306252"
+                        />
+                        <div className="field-group">
+                            <label>Grade Level</label>
+                            <select
+                                value={sem.gradeLevel || ''}
+                                onChange={(e) => updateSem(semKey, 'gradeLevel', e.target.value)}
+                                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.2)', fontSize: '13px', background: 'var(--bg-card)', color: 'white' }}
+                            >
+                                <option value="">Select</option>
+                                <option value="11">11</option>
+                                <option value="12">12</option>
+                            </select>
+                        </div>
                         <Field label="School Year" value={sem.sy} onInput={(v) => updateSem(semKey, 'sy', v)} placeholder="e.g. 2024-2025" />
                         <Field label="Semester" value={sem.sem} onInput={(v) => updateSem(semKey, 'sem', v)} placeholder="e.g. 1st or 2nd" />
                         <Field label="Track / Strand" value={sem.trackStrand} onInput={(v) => updateSem(semKey, 'trackStrand', v)} placeholder="e.g. TVL - ICT" />
@@ -833,9 +949,21 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false }) {
                         </button>
                     </div>
 
-                    <div className="gen-ave-row">
+                    <div className="gen-ave-row" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                         <label>General Average for the Semester:</label>
-                        <input value={sem.genAve} readOnly placeholder="—" style={{ opacity: 0.8 }} />
+                        <input value={sem.genAve} readOnly placeholder="—" style={{ opacity: 0.8, width: '80px' }} />
+                        <input
+                            value={sem.genAction}
+                            readOnly
+                            placeholder="—"
+                            style={{
+                                opacity: 0.85,
+                                width: '100px',
+                                fontWeight: 600,
+                                textAlign: 'center',
+                                color: sem.genAction === 'PASSED' ? '#4ade80' : sem.genAction === 'FAILED' ? '#f87171' : undefined
+                            }}
+                        />
                     </div>
 
                     <div className="form-grid full-span" style={{ marginTop: '16px' }}>

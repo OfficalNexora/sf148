@@ -162,7 +162,7 @@ function Sidebar({
                                     <li
                                         key={student.id}
                                         className="student-node search-highlight"
-                                        onClick={() => onStudentSelect(student.id, student.name)}
+                                        onClick={() => onStudentSelect(student.id, student.name, currentPath)}
                                     >
                                         <div className="student-content">
                                             <span className="student-name">
@@ -335,7 +335,7 @@ function Sidebar({
                                 <li
                                     key={student.id}
                                     className="student-node"
-                                    onClick={() => onStudentSelect(student.id, student.name)}
+                                    onClick={() => onStudentSelect(student.id, student.name, viewPath)}
                                 >
                                     <div className="student-content">
                                         <span className="student-name">

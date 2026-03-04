@@ -74,20 +74,20 @@ function Dashboard({ userRole, onLogout }) {
     }, []);
 
     // Student loading
-    const loadStudent = async (id, name) => {
+    const loadStudent = async (id, name, pathContext = []) => {
         setShowUserManagement(false);
         setCurrentStudent({ id, name });
 
         let data = await db.loadStudent(id);
         if (!data) {
-            data = generateEmptyRecord(id, name);
+            data = generateEmptyRecord(id, name, pathContext);
         }
         setCurrentStudentData(data);
         setStatus('Ready');
     };
 
     // Generate empty student record
-    const generateEmptyRecord = (id, name) => {
+    const generateEmptyRecord = (id, name, pathContext = []) => {
         let lname = '', fname = '';
         if (name && name.includes(',')) {
             [lname, fname] = name.split(',').map(s => s.trim());
@@ -95,9 +95,18 @@ function Dashboard({ userRole, onLogout }) {
             fname = name.trim();
         }
 
-        const makeSem = () => ({
-            school: '', schoolId: '', gradeLevel: '', sy: '', sem: '',
-            trackStrand: '', section: '',
+        let gradeLevel = '', trackStrand = '', section = '';
+        if (pathContext && pathContext.length >= 3) {
+            gradeLevel = pathContext[0].toString().replace(/grade\s+/i, '').trim();
+            trackStrand = pathContext[1] || '';
+            section = pathContext[2].toString().replace(/section\s+/i, '').trim() || pathContext[2];
+        }
+
+        const makeSem = (semNum) => ({
+            school: '', schoolId: '',
+            gradeLevel: (semNum === 1 || semNum === 2) ? (gradeLevel === '11' ? '11' : '') : (gradeLevel === '12' ? '12' : ''),
+            sy: '', sem: semNum % 2 === 1 ? '1st' : '2nd',
+            trackStrand: trackStrand, section: section,
             subjects: Array.from({ length: 9 }, () => ({ type: '', subject: '', q1: '', q2: '', final: '', action: '' })),
             genAve: '', remarks: '', adviserName: '', certName: '', dateChecked: '',
             remedial: {
@@ -115,17 +124,17 @@ function Dashboard({ userRole, onLogout }) {
                 pept: false, peptRating: '', als: false, alsRating: '',
                 examDate: '', clcName: '', others: false, othersSpec: ''
             },
-            semester1: makeSem(),
-            semester2: makeSem(),
-            semester3: makeSem(),
-            semester4: makeSem(),
+            semester1: makeSem(1),
+            semester2: makeSem(2),
+            semester3: makeSem(3),
+            semester4: makeSem(4),
             annex: [
                 ...Array.from({ length: 15 }, () => ({ type: 'Core', subject: '', active: true })),
                 ...Array.from({ length: 7 }, () => ({ type: 'Applied', subject: '', active: true })),
                 ...Array.from({ length: 9 }, () => ({ type: 'Specialized', subject: '', active: true })),
                 ...Array.from({ length: 5 }, () => ({ type: 'Other', subject: '', active: true }))
             ],
-            certification: { trackStrand: '', genAve: '', awards: '', gradDate: '', schoolHead: '', certDate: '', remarks: '', dateIssued: '' }
+            certification: { trackStrand: trackStrand, genAve: '', awards: '', gradDate: '', schoolHead: '', certDate: '', remarks: '', dateIssued: '' }
         };
     };
 
@@ -558,6 +567,8 @@ function Dashboard({ userRole, onLogout }) {
                                     setStatusColor('orange');
                                 }}
                                 onSave={saveStudentData}
+                                showAlert={showAlert}
+                                showConfirm={showConfirm}
                             />
                         ) : (
                             <div id="welcome-screen" style={{ textAlign: 'center', color: '#888', marginTop: '50px' }}>
