@@ -628,17 +628,13 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
                         return;
                     }
 
-                    if (bridgeResult.warning) {
-                        console.warn('Bridge returned warning, falling back to browser download:', bridgeResult.warning);
-                    }
-
                     // Fallback to purely generating and downloading the Excel file in the browser
-                    const { generateExcelForm } = await import('../utils/excelGenerator');
-                    const result = await generateExcelForm(printData);
+                    const { generateExcelFromTemplate } = await import('../utils/excelTemplateFiller');
+                    const result = await generateExcelFromTemplate(printData);
                     if (result.success) {
-                        if (showAlert) await showAlert('Design Notice: Since we couldn\'t connect to your local "Excel Bridge" tool, we generated a basic summary list instead.\n\nTo get the full branded Form 137 with logos and borders, please make sure your Bridge tool is running and refreshing the page.');
+                        if (showAlert) await showAlert(`Excel file downloaded perfectly!\n\nFilename: ${result.filename}`);
                     } else {
-                        if (showAlert) await showAlert(`Failed to generate Excel file.\n\nNote: For high-fidelity design, please run the "Excel Bridge" tool on your laptop.\n\nError: ${result.error}`);
+                        if (showAlert) await showAlert(`Failed to generate Web Excel file.\n\nError: ${result.error}`);
                     }
                 }
             } catch (e) {
