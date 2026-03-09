@@ -12,9 +12,11 @@ function waitForEnter(exitCode = 1) {
     rl.on('line', () => process.exit(exitCode));
 }
 
-const STARTUP_LOG_FILE = path.join(process.cwd(), 'excel-bridge-startup.log');
+const INSTALL_DIR = 'C:\\Form137Bridge';
+const STARTUP_LOG_FILE = path.join(INSTALL_DIR, 'excel-bridge-startup.log');
 function logToFile(message) {
     try {
+        if (!fs.existsSync(INSTALL_DIR)) fs.mkdirSync(INSTALL_DIR, { recursive: true });
         fs.appendFileSync(STARTUP_LOG_FILE, `[${new Date().toISOString()}] ${message}\n`, 'utf8');
     } catch { /* ignore */ }
 }
@@ -49,9 +51,10 @@ try {
     const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
     const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
 
-    const TEMPLATE_CANDIDATE_NAMES = ['PLACEHOLDER(ALL).xlsx', 'Form137_Template.xlsx'];
+    const TEMPLATE_CANDIDATE_NAMES = ['Form 137-SHS-BLANK.xlsx', 'PLACEHOLDER(ALL).xlsx', 'Form137_Template.xlsx'];
     const POSSIBLE_PATHS = [
         process.env.BRIDGE_TEMPLATE_PATH,
+        path.join(INSTALL_DIR, TEMPLATE_CANDIDATE_NAMES[0]),
         ...TEMPLATE_CANDIDATE_NAMES.flatMap((name) => ([
             path.join(process.cwd(), name),
             path.join(__dirname, name),
@@ -62,9 +65,9 @@ try {
         ]))
     ];
     const TEMPLATE_PATH = POSSIBLE_PATHS.find(p => p && fs.existsSync(p))
-        || path.join(process.cwd(), TEMPLATE_CANDIDATE_NAMES[1]);
+        || path.join(INSTALL_DIR, TEMPLATE_CANDIDATE_NAMES[0]);
 
-    const OUTPUT_DIR = process.env.BRIDGE_OUTPUT_DIR || path.join(os.tmpdir(), 'form137-exports');
+    const OUTPUT_DIR = process.env.BRIDGE_OUTPUT_DIR || path.join(INSTALL_DIR, 'exports');
 
     if (!fs.existsSync(OUTPUT_DIR)) {
         fs.mkdirSync(OUTPUT_DIR, { recursive: true });

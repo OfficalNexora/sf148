@@ -93,3 +93,28 @@ export async function openExcelViaBridge(data, options = {}) {
         };
     }
 }
+export async function checkBridgeHealth() {
+    const baseUrl = getBridgeBaseUrl();
+    const apiKey = (import.meta.env.EXCEL_BRIDGE_KEY || import.meta.env.VITE_EXCEL_BRIDGE_KEY || '').trim();
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
+
+        const response = await fetch(`${baseUrl}/health`, {
+            method: 'GET',
+            headers: {
+                'ngrok-skip-browser-warning': 'true',
+                ...(apiKey ? { 'X-Bridge-Key': apiKey } : {})
+            },
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        if (!response.ok) return { success: false };
+        const data = await response.json();
+        return { success: data?.success || false };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+}

@@ -6,6 +6,7 @@ import Modals from './Modals';
 import SyncInbox from './SyncInbox';
 import db from '../services/db';
 import syncService from '../services/syncService';
+import { checkBridgeHealth } from '../services/excelBridgeClient';
 
 function Dashboard({ userRole, onLogout }) {
     const isDesktopMode = db.isElectron();
@@ -30,9 +31,21 @@ function Dashboard({ userRole, onLogout }) {
     const [sendToAdminName, setSendToAdminName] = useState('');
     const [isSending, setIsSending] = useState(false);
 
-    // Load structure on mount
+    // Bridge Status
+    const [bridgeOnline, setBridgeOnline] = useState(false);
+
+    // Load structure on mount and check bridge health
     useEffect(() => {
         loadStructure();
+
+        const checkBridge = async () => {
+            const health = await checkBridgeHealth();
+            setBridgeOnline(health.success);
+        };
+
+        checkBridge();
+        const interval = setInterval(checkBridge, 5000); // Check every 5s
+        return () => clearInterval(interval);
     }, []);
 
     // Mount Firestore listener for admin
@@ -538,6 +551,38 @@ function Dashboard({ userRole, onLogout }) {
                         </button>
                     </div>
                     <div className="status-bar" style={{ color: statusColor }}>{status}</div>
+
+                    <div className="bridge-status-container" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px' }}>
+                            <div style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                background: bridgeOnline ? '#28a745' : '#dc3545',
+                                boxShadow: bridgeOnline ? '0 0 5px #28a745' : 'none'
+                            }}></div>
+                            <span style={{ color: bridgeOnline ? '#28a745' : '#dc3545' }}>
+                                Excel Bridge: {bridgeOnline ? 'Connected' : 'Disconnected'}
+                            </span>
+                        </div>
+                        {!bridgeOnline && (
+                            <button
+                                className="btn-secondary"
+                                style={{ padding: '4px 10px', fontSize: '11px', border: '1px solid #f59e0b', color: '#f59e0b', background: 'rgba(245,158,11,0.1)' }}
+                                onClick={() => {
+                                    const link = document.createElement('a');
+                                    link.href = '/install-bridge.ps1';
+                                    link.download = 'install-bridge.ps1';
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    showAlert('Installer downloaded! Right-click "install-bridge.ps1" and select "Run with PowerShell" to install the Excel Bridge.');
+                                }}
+                            >
+                                Install Excel Bridge
+                            </button>
+                        )}
+                    </div>
                 </div>
                 {!isDesktopMode && !window.location.hostname.includes('vercel.app') && (
                     <div style={{
