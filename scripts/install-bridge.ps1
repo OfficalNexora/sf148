@@ -2,13 +2,18 @@
 # Run this from the form137-react root directory
 
 # --- 0. Request Admin Privileges ---
+$ProjectRoot = Get-Item -Path "$PSScriptRoot\.."
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "Requesting Administrator privileges..." -ForegroundColor Yellow
-    $arguments = "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    # Relaunch with -WorkingDirectory to preserve context
+    $arguments = "-ExecutionPolicy Bypass -NoExit -Command `"Set-Location -Path '$($ProjectRoot.FullName)'; & '$PSCommandPath'`""
     Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs
     exit
 }
+
+# Ensure we are in the script's parent directory even if started elsewhere
+Set-Location -Path $ProjectRoot.FullName
 
 $InstallDir = "C:\Form137Bridge"
 $ExeName = "excel-bridge-server.exe"
@@ -59,8 +64,8 @@ try {
     netsh advfirewall firewall add rule name="Form 137 Excel Bridge" dir=in action=allow protocol=TCP localport=8787
 
     Write-Host "`nInstallation Complete!" -ForegroundColor Green
-    Write-Host "Location: $InstallDir"
-    Write-Host "Protocol: $ProtocolName://"
+    Write-Host "Location: ${InstallDir}"
+    Write-Host "Protocol: ${ProtocolName}://"
     Write-Host "The bridge will now start automatically with Windows.`n"
 
     # Start the bridge now
