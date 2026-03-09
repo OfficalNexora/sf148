@@ -48,13 +48,14 @@ try {
 
 try {
     const PORT = Number(process.env.BRIDGE_PORT || 8787);
-    const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
+    const HOST = process.env.BRIDGE_HOST || '0.0.0.0';
     const ALLOW_ORIGIN = process.env.BRIDGE_ALLOW_ORIGIN || '*';
 
-    const TEMPLATE_CANDIDATE_NAMES = ['Form 137-SHS-BLANK.xlsx', 'PLACEHOLDER(ALL).xlsx', 'Form137_Template.xlsx'];
+    const TEMPLATE_CANDIDATE_NAMES = ['Form137_Template.xlsx', 'Form 137-SHS-BLANK.xlsx', 'PLACEHOLDER(ALL).xlsx'];
     const POSSIBLE_PATHS = [
         process.env.BRIDGE_TEMPLATE_PATH,
         path.join(INSTALL_DIR, TEMPLATE_CANDIDATE_NAMES[0]),
+        path.join(INSTALL_DIR, TEMPLATE_CANDIDATE_NAMES[1]),
         ...TEMPLATE_CANDIDATE_NAMES.flatMap((name) => ([
             path.join(process.cwd(), name),
             path.join(__dirname, name),
@@ -66,6 +67,11 @@ try {
     ];
     const TEMPLATE_PATH = POSSIBLE_PATHS.find(p => p && fs.existsSync(p))
         || path.join(INSTALL_DIR, TEMPLATE_CANDIDATE_NAMES[0]);
+
+    if (!fs.existsSync(TEMPLATE_PATH)) {
+        console.warn(`[CRITICAL] Template not found in any possible path. Bridge will use fallback generator.`);
+        logToFile(`[CRITICAL] Template not found: ${TEMPLATE_PATH}`);
+    }
 
     const OUTPUT_DIR = process.env.BRIDGE_OUTPUT_DIR || path.join(INSTALL_DIR, 'exports');
 
@@ -510,6 +516,13 @@ try {
                 try { await printFileWindows(filePath); printed = true; } catch (err) { console.warn(`Print failed: ${err.message}`); }
             }
             if (!body || body.openAfterPrint !== false) await openFile(filePath);
+            if (body && body.returnFile) {
+                res.writeHead(200, {
+                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'Content-Disposition': `attachment; filename="Form137_${lastName}.xlsx"`
+                });
+                return fs.createReadStream(filePath).pipe(res);
+            }
             return sendJson(req, res, 200, { success: true, filePath, printed });
         } catch (err) {
             console.error('Bridge error:', err);
@@ -521,6 +534,35 @@ try {
     const server = http.createServer(async (req, res) => {
         if (req.method === 'OPTIONS') { setCors(req, res); res.writeHead(204); res.end(); return; }
         if (req.method === 'GET' && req.url === '/health') return sendJson(req, res, 200, { success: true, service: 'excel-bridge', host: HOST, port: PORT });
+
+        // --- Download Routes ---
+        if (req.method === 'GET' && req.url === '/download/installer') {
+            const target = path.join(process.cwd(), 'scripts', 'setup-portable-bridge.ps1');
+            console.log(`Download Installer: ${target} (exists: ${fs.existsSync(target)})`);
+            if (fs.existsSync(target)) {
+                res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename="setup-portable-bridge.ps1"' });
+                return fs.createReadStream(target).pipe(res);
+            }
+            return sendJson(req, res, 404, { success: false, error: 'Installer script not found.' });
+        }
+
+        if (req.method === 'GET' && req.url === '/download/exe') {
+            const target = path.join(process.cwd(), 'release', 'excel-bridge-server.exe');
+            if (fs.existsSync(target)) {
+                res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename="excel-bridge-server.exe"' });
+                return fs.createReadStream(target).pipe(res);
+            }
+            return sendJson(req, res, 404, { success: false, error: 'Bridge executable not found.' });
+        }
+
+        if (req.method === 'GET' && req.url === '/download/template') {
+            if (fs.existsSync(TEMPLATE_PATH)) {
+                res.writeHead(200, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="${path.basename(TEMPLATE_PATH)}"` });
+                return fs.createReadStream(TEMPLATE_PATH).pipe(res);
+            }
+            return sendJson(req, res, 404, { success: false, error: 'Template file not found.' });
+        }
+
         if (req.method === 'POST' && req.url === '/open-excel') { await handleOpenExcel(req, res); return; }
         return sendJson(req, res, 404, { success: false, error: 'Not found.' });
     });

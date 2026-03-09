@@ -11,7 +11,7 @@
         "bridge:excel": "node scripts/excel-bridge-server.js",
         "bridge:ngrok:auth": "powershell -ExecutionPolicy Bypass -File scripts/setup-ngrok-auth.ps1",
         "bridge:ngrok": "powershell -ExecutionPolicy Bypass -File scripts/start-bridge-ngrok.ps1",
-        "build:bridge": "pkg scripts/excel-bridge-server.js --targets node18-win-x64 --output release/excel-bridge-server.exe",
+        "build:bridge": "python -m PyInstaller --onefile --console --name excel-bridge-server scripts/excel-bridge-server.py --distpath release --workpath tmp/build --specpath tmp/spec --noconfirm",
         "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
         "electron:build": "vite build && electron-builder"
     },

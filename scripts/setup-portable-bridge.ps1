@@ -11,18 +11,21 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
 }
 
 $InstallDir = "C:\Form137Bridge"
-$ExeName = "excel-bridge-server.exe"
-$SourceExe = "$PSScriptRoot\$ExeName"
-$TemplateName = "Form 137-SHS-BLANK.xlsx"
-$SourceTemplate = "$PSScriptRoot\$TemplateName"
+$PyScript = "excel-bridge-server.py"
+$ExeName = "excel-bridge-server.exe" 
+$NgrokExe = "ngrok.exe"
+$TemplateName = "Form137_Template.xlsx"
 $ProtocolName = "sf10-bridge"
 
-Write-Host "--- Form 137 Bridge Portable Setup ---" -ForegroundColor Cyan
+Write-Host "--- Form 137 Python Bridge & Ngrok Setup ---" -ForegroundColor Cyan
 
 try {
     # 1. Verify files exist in the same folder
-    if (-not (Test-Path $SourceExe)) {
-        throw "Could not find $ExeName in the current folder ($PSScriptRoot). Please ensure the .exe is next to this script."
+    $RequiredFiles = @($ExeName, $TemplateName)
+    foreach ($f in $RequiredFiles) {
+        if (-not (Test-Path "$PSScriptRoot\$f")) {
+            throw "Could not find $f in the current folder ($PSScriptRoot). Please ensure all files are extracted together."
+        }
     }
 
     # 2. Create Installation Directory
@@ -32,48 +35,58 @@ try {
     }
 
     # 3. Copy files to C:\Form137Bridge
-    Write-Host "Copying files to $InstallDir..."
-    Copy-Item -Path $SourceExe -Destination "$InstallDir\$ExeName" -Force
+    Write-Host "Copying bridge files to $InstallDir..."
+    Copy-Item -Path "$PSScriptRoot\$ExeName" -Destination "$InstallDir\$ExeName" -Force
+    Copy-Item -Path "$PSScriptRoot\$TemplateName" -Destination "$InstallDir\$TemplateName" -Force
     
-    if (Test-Path $SourceTemplate) {
-        Copy-Item -Path $SourceTemplate -Destination "$InstallDir\$TemplateName" -Force
-    }
-    else {
-        Write-Host "Warning: $TemplateName not found in current folder. Skipping template copy." -ForegroundColor Yellow
+    if (Test-Path "$PSScriptRoot\$NgrokExe") {
+        Write-Host "Copying Ngrok..."
+        Copy-Item -Path "$PSScriptRoot\$NgrokExe" -Destination "$InstallDir\$NgrokExe" -Force
     }
 
-    # 4. Register Custom Protocol (sf10-bridge://)
+    # 4. Create a Startup Batch File that handles both Bridge and Ngrok (if present)
+    $StartBatch = "$InstallDir\run-bridge.bat"
+    $BatchContent = @"
+@echo off
+title Form 137 Excel Bridge
+cd /d "%~dp0"
+echo Starting Excel Bridge Server...
+start "" "excel-bridge-server.exe"
+if exist "ngrok.exe" (
+    echo Starting Ngrok Tunnel...
+    start "" "ngrok.exe" http 8787 --log=stdout
+)
+"@
+    Set-Content -Path $StartBatch -Value $BatchContent
+
+    # 5. Register Custom Protocol (pointing to batch file)
     Write-Host "Registering protocol ${ProtocolName}..."
     $RegPath = "HKCU:\Software\Classes\${ProtocolName}"
     if (Test-Path $RegPath) { Remove-Item $RegPath -Recurse -Force }
     New-Item -Path $RegPath -Value "URL:Form 137 Bridge Protocol" -Force | Out-Null
     New-ItemProperty -Path $RegPath -Name "URL Protocol" -Value "" -Force | Out-Null
     New-Item -Path "$RegPath\shell\open\command" -Force | Out-Null
-    Set-Item -Path "$RegPath\shell\open\command" -Value "`"$InstallDir\$ExeName`" `"%1`""
+    Set-Item -Path "$RegPath\shell\open\command" -Value "cmd.exe /c `"$StartBatch`" `"%1`""
 
-    # 5. Add to Windows Startup
+    # 6. Add to Windows Startup
     Write-Host "Adding to Windows Startup..."
     $StartupReg = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-    New-ItemProperty -Path $StartupReg -Name "Form137Bridge" -Value "`"$InstallDir\$ExeName`"" -PropertyType String -Force | Out-Null
+    New-ItemProperty -Path $StartupReg -Name "Form137Bridge" -Value "`"$StartBatch`"" -PropertyType String -Force | Out-Null
 
-    # 6. Open Firewall Port
+    # 7. Open Firewall Port
     Write-Host "Adding Firewall Rule (Port 8787)..."
     netsh advfirewall firewall add rule name="Form 137 Excel Bridge" dir=in action=allow protocol=TCP localport=8787 | Out-Null
 
     Write-Host "`nInstallation Complete!" -ForegroundColor Green
     Write-Host "Location: ${InstallDir}"
-    Write-Host "Protocol: ${ProtocolName}://"
-    Write-Host "The bridge will now start automatically with Windows.`n"
+    Write-Host "The bridge and tunnel will now start automatically.`n"
 
-    # Start the bridge now
-    Write-Host "Starting bridge..."
-    Start-Process -FilePath "$InstallDir\$ExeName" -WorkingDirectory $InstallDir
-
+    # Start it now
+    Start-Process -FilePath $StartBatch -WorkingDirectory $InstallDir
 }
 catch {
     $errorMessage = $_.Exception.Message
     Write-Host "`nFATAL ERROR: $errorMessage" -ForegroundColor Red
-    Write-Host "Please ensure you have permission to write to C:\ and modify the registry."
     Write-Host "Press any key to exit..."
     $null = [Console]::ReadKey($true)
 }

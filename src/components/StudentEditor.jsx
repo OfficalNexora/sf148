@@ -682,10 +682,11 @@ function StudentEditor({ data, onChange, onSave, isDesktopMode = false, showAler
                     }
                 } else {
                     // Web Browser Environment (Vercel):
-                    // Ping the host Python bridge, but demand the binary file back instead of it opening on the host
+                    // Ping the host local bridge to perform local operations (Open/Print)
                     const { openExcelViaBridge } = await import('../services/excelBridgeClient');
                     const bridgeResult = await openExcelViaBridge(printData, {
-                        returnFile: true
+                        autoPrint: true,    // USER REQUEST: ensure it prints
+                        openAfterPrint: true // USER REQUEST: ensure it opens the excel
                     });
 
                     if (bridgeResult.success) {

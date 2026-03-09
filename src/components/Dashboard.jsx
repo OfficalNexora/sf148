@@ -6,7 +6,7 @@ import Modals from './Modals';
 import SyncInbox from './SyncInbox';
 import db from '../services/db';
 import syncService from '../services/syncService';
-import { checkBridgeHealth } from '../services/excelBridgeClient';
+import { checkBridgeHealth, getBridgeDownloadUrl } from '../services/excelBridgeClient';
 
 function Dashboard({ userRole, onLogout }) {
     const isDesktopMode = db.isElectron();
@@ -323,7 +323,15 @@ function Dashboard({ userRole, onLogout }) {
                 await showAlert('Export failed: ' + (result.error || 'Unknown error'));
             }
         } else {
-            // Browser: generate Excel using SheetJS
+            // Browser: use Bridge if available, otherwise fallback to SheetJS
+            if (bridgeOnline) {
+                const result = await openExcelViaBridge(currentStudentData, { returnFile: true });
+                if (result.success) {
+                    setShareModal(false);
+                    return;
+                }
+            }
+            // Fallback to SheetJS
             try {
                 const XLSX = await import('xlsx');
                 const wb = XLSX.utils.book_new();
@@ -569,34 +577,61 @@ function Dashboard({ userRole, onLogout }) {
                             <button
                                 className="btn-secondary"
                                 style={{ padding: '4px 10px', fontSize: '11px', border: '1px solid #f59e0b', color: '#f59e0b', background: 'rgba(245,158,11,0.1)' }}
-                                onClick={() => {
-                                    const link = document.createElement('a');
-                                    link.href = '/install-bridge.ps1';
-                                    link.download = 'install-bridge.ps1';
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                    showAlert('Installer downloaded! Right-click "install-bridge.ps1" and select "Run with PowerShell" to install the Excel Bridge.');
+                                onClick={async () => {
+                                    const confirmed = await showConfirm('Do you want to download the Bridge Setup files? This includes the Installer script, the Bridge executable, and the Excel template.');
+                                    if (!confirmed) return;
+
+                                    // Try to download via the bridge itself if it's reachable but just failing health (unlikely)
+                                    // or provide direct fallback links if available.
+                                    // Given the user wants to set up a server on their laptop, we assume the server might be local or remote.
+
+                                    const installerUrl = getBridgeDownloadUrl('installer');
+                                    const exeUrl = getBridgeDownloadUrl('exe');
+                                    const templateUrl = getBridgeDownloadUrl('template');
+
+                                    const download = (url, name) => {
+                                        const link = document.createElement('a');
+                                        link.href = url;
+                                        link.download = name;
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                    };
+
+                                    // We'll provide a nice instruction alert instead of just triggered downloads
+                                    showAlert(`
+                                        STEP 1: Download the Bridge Setup files being opened now.
+                                        STEP 2: Place them together in your Downloads folder.
+                                        STEP 3: Right-click "setup-portable-bridge.ps1" and select "Run with PowerShell".
+                                        
+                                        (Note: We are now using the Python-based Excel Bridge for improved stability.)
+                                    `);
+
+                                    download(installerUrl, 'setup-portable-bridge.ps1');
+                                    setTimeout(() => download(exeUrl, 'excel-bridge-server.exe'), 500);
+                                    setTimeout(() => download(templateUrl, 'Form137_Template.xlsx'), 1000);
                                 }}
                             >
-                                Install Excel Bridge
+                                Setup Python Bridge
                             </button>
                         )}
                     </div>
                 </div>
-                {!isDesktopMode && !window.location.hostname.includes('vercel.app') && (
-                    <div style={{
-                        margin: '8px 16px 0 16px',
-                        padding: '8px 10px',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        color: '#93c5fd',
-                        background: 'rgba(59,130,246,0.12)',
-                        border: '1px solid rgba(59,130,246,0.35)'
-                    }}>
-                        Web mode: data is stored in this browser. Use Online Database Sync to share records across devices.
-                    </div>
-                )}
+                {
+                    !isDesktopMode && !window.location.hostname.includes('vercel.app') && (
+                        <div style={{
+                            margin: '8px 16px 0 16px',
+                            padding: '8px 10px',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            color: '#93c5fd',
+                            background: 'rgba(59,130,246,0.12)',
+                            border: '1px solid rgba(59,130,246,0.35)'
+                        }}>
+                            Web mode: data is stored in this browser. Use Online Database Sync to share records across devices.
+                        </div>
+                    )
+                }
 
                 <div className="editor-viewport">
                     <div id="editor-content">
@@ -623,137 +658,141 @@ function Dashboard({ userRole, onLogout }) {
                         )}
                     </div>
                 </div>
-            </main>
+            </main >
 
             {/* Share & Sync Modal */}
-            {shareModal && (
-                <div className="modal-overlay" style={{ display: 'flex' }}>
-                    <div className="modal-content premium-modal center-text">
-                        <h2 style={{ marginTop: 0, marginBottom: '5px' }}>Share & Sync</h2>
-                        <p style={{ color: '#cbd5e1', marginBottom: '20px', fontSize: '13px' }}>Export this student's record, or sync the entire database.</p>
+            {
+                shareModal && (
+                    <div className="modal-overlay" style={{ display: 'flex' }}>
+                        <div className="modal-content premium-modal center-text">
+                            <h2 style={{ marginTop: 0, marginBottom: '5px' }}>Share & Sync</h2>
+                            <p style={{ color: '#cbd5e1', marginBottom: '20px', fontSize: '13px' }}>Export this student's record, or sync the entire database.</p>
 
-                        <p style={{ color: '#94a3b8', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>Student Record Export</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-                            <button
-                                className="btn-primary"
-                                style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', padding: '12px' }}
-                                onClick={exportToExcel}
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                                Export to Excel (.xlsx)
-                            </button>
-                            <button
-                                className="btn-primary"
-                                style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', padding: '12px' }}
-                                onClick={exportToFile}
-                            >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                                Export to JSON (.json)
-                            </button>
-                        </div>
-
-                        <p style={{ color: '#94a3b8', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>Online Database Sync</p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {/* Send to Admin (for teachers) */}
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <input
-                                    type="text"
-                                    placeholder="Your name (e.g. Ms. Santos)"
-                                    value={sendToAdminName}
-                                    onChange={e => setSendToAdminName(e.target.value)}
-                                    style={{
-                                        flex: 1,
-                                        padding: '8px 10px',
-                                        borderRadius: '6px',
-                                        border: '1px solid rgba(255,255,255,0.15)',
-                                        background: 'rgba(255,255,255,0.07)',
-                                        color: 'white',
-                                        fontSize: '12px'
-                                    }}
-                                />
+                            <p style={{ color: '#94a3b8', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>Student Record Export</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
                                 <button
                                     className="btn-primary"
-                                    disabled={isSending || !sendToAdminName.trim()}
-                                    style={{
-                                        padding: '8px 14px',
-                                        background: isSending ? '#555' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                                        whiteSpace: 'nowrap',
-                                        fontSize: '12px'
-                                    }}
-                                    onClick={async () => {
-                                        setIsSending(true);
-                                        try {
-                                            // Gather local DB snapshot
-                                            const structureData = await db.getStructure();
-                                            const records = await db.getAllRecords();
-                                            const syncData = { structure: structureData, records };
-                                            const result = await syncService.submitSync(sendToAdminName.trim(), syncData);
-                                            if (result.success) {
-                                                setShareModal(false);
-                                                setSendToAdminName('');
-                                                await showAlert('Sent! The admin will receive your data instantly.');
-                                            } else {
-                                                await showAlert('Failed to send: ' + result.error);
-                                            }
-                                        } finally {
-                                            setIsSending(false);
-                                        }
-                                    }}
+                                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', padding: '12px' }}
+                                    onClick={exportToExcel}
                                 >
-                                    {isSending ? 'Sending...' : 'Send to Admin'}
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                    Export to Excel (.xlsx)
+                                </button>
+                                <button
+                                    className="btn-primary"
+                                    style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', padding: '12px' }}
+                                    onClick={exportToFile}
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                    Export to JSON (.json)
                                 </button>
                             </div>
-                            {/* Offline fallback */}
-                            <button
-                                className="btn-primary"
-                                style={{ background: 'rgba(255,255,255,0.08)', padding: '10px', fontSize: '12px', color: '#94a3b8' }}
-                                onClick={exportSyncDb}
-                            >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}><polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path></svg>
-                                {isDesktopMode ? 'Download Sync File (offline fallback)' : 'Download Sync File'}
-                            </button>
-                            {userRole === 'admin' && (
+
+                            <p style={{ color: '#94a3b8', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>Online Database Sync</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {/* Send to Admin (for teachers) */}
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input
+                                        type="text"
+                                        placeholder="Your name (e.g. Ms. Santos)"
+                                        value={sendToAdminName}
+                                        onChange={e => setSendToAdminName(e.target.value)}
+                                        style={{
+                                            flex: 1,
+                                            padding: '8px 10px',
+                                            borderRadius: '6px',
+                                            border: '1px solid rgba(255,255,255,0.15)',
+                                            background: 'rgba(255,255,255,0.07)',
+                                            color: 'white',
+                                            fontSize: '12px'
+                                        }}
+                                    />
+                                    <button
+                                        className="btn-primary"
+                                        disabled={isSending || !sendToAdminName.trim()}
+                                        style={{
+                                            padding: '8px 14px',
+                                            background: isSending ? '#555' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                            whiteSpace: 'nowrap',
+                                            fontSize: '12px'
+                                        }}
+                                        onClick={async () => {
+                                            setIsSending(true);
+                                            try {
+                                                // Gather local DB snapshot
+                                                const structureData = await db.getStructure();
+                                                const records = await db.getAllRecords();
+                                                const syncData = { structure: structureData, records };
+                                                const result = await syncService.submitSync(sendToAdminName.trim(), syncData);
+                                                if (result.success) {
+                                                    setShareModal(false);
+                                                    setSendToAdminName('');
+                                                    await showAlert('Sent! The admin will receive your data instantly.');
+                                                } else {
+                                                    await showAlert('Failed to send: ' + result.error);
+                                                }
+                                            } finally {
+                                                setIsSending(false);
+                                            }
+                                        }}
+                                    >
+                                        {isSending ? 'Sending...' : 'Send to Admin'}
+                                    </button>
+                                </div>
+                                {/* Offline fallback */}
                                 <button
                                     className="btn-primary"
-                                    style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', padding: '10px', fontSize: '12px' }}
-                                    onClick={() => { setShareModal(false); setShowSyncInbox(true); }}
+                                    style={{ background: 'rgba(255,255,255,0.08)', padding: '10px', fontSize: '12px', color: '#94a3b8' }}
+                                    onClick={exportSyncDb}
                                 >
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-                                    Open Sync Inbox {pendingSyncs.length > 0 && `(${pendingSyncs.length} pending)`}
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}><polyline points="8 17 12 21 16 17"></polyline><line x1="12" y1="12" x2="12" y2="21"></line><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"></path></svg>
+                                    {isDesktopMode ? 'Download Sync File (offline fallback)' : 'Download Sync File'}
                                 </button>
-                            )}
-                        </div>
+                                {userRole === 'admin' && (
+                                    <button
+                                        className="btn-primary"
+                                        style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', padding: '10px', fontSize: '12px' }}
+                                        onClick={() => { setShareModal(false); setShowSyncInbox(true); }}
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                                        Open Sync Inbox {pendingSyncs.length > 0 && `(${pendingSyncs.length} pending)`}
+                                    </button>
+                                )}
+                            </div>
 
-                        <button
-                            className="btn-secondary full-width"
-                            style={{ marginTop: '20px' }}
-                            onClick={() => setShareModal(false)}
-                        >
-                            Cancel
-                        </button>
+                            <button
+                                className="btn-secondary full-width"
+                                style={{ marginTop: '20px' }}
+                                onClick={() => setShareModal(false)}
+                            >
+                                Cancel
+                            </button>
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Sync Inbox Modal (Admin Only) */}
-            {showSyncInbox && (
-                <div className="modal-overlay" style={{ display: 'flex' }}>
-                    <div className="modal-content premium-modal" style={{ maxWidth: '420px', width: '100%' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                            <h2 style={{ margin: 0, fontSize: '17px' }}>Sync Inbox</h2>
-                            <button
-                                onClick={() => setShowSyncInbox(false)}
-                                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '18px' }}
-                            >✕</button>
+            {
+                showSyncInbox && (
+                    <div className="modal-overlay" style={{ display: 'flex' }}>
+                        <div className="modal-content premium-modal" style={{ maxWidth: '420px', width: '100%' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                <h2 style={{ margin: 0, fontSize: '17px' }}>Sync Inbox</h2>
+                                <button
+                                    onClick={() => setShowSyncInbox(false)}
+                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '18px' }}
+                                >✕</button>
+                            </div>
+                            <SyncInbox
+                                requests={pendingSyncs}
+                                onMerge={() => { loadStructure(); }}
+                                onDismiss={() => { }}
+                            />
                         </div>
-                        <SyncInbox
-                            requests={pendingSyncs}
-                            onMerge={() => { loadStructure(); }}
-                            onDismiss={() => { }}
-                        />
                     </div>
-                </div>
-            )}
+                )
+            }
 
             <Modals
                 alertModal={alertModal}
@@ -780,7 +819,7 @@ function Dashboard({ userRole, onLogout }) {
                     setConfirmModal({ show: false, message: '', resolve: null });
                 }}
             />
-        </div>
+        </div >
     );
 }
 

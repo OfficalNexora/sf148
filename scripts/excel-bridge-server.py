@@ -12,7 +12,7 @@ from openpyxl.utils import get_column_letter
 # --- CONFIGURATION ---
 PORT = 8787
 API_KEY = "sf10-bridge-2024"
-TEMPLATE_NAME = 'PLACEHOLDER(ALL).xlsx'
+TEMPLATE_CANDIDATE_NAMES = ['Form137_Template.xlsx', 'Form 137-SHS-BLANK.xlsx', 'PLACEHOLDER(ALL).xlsx']
 
 # Robust path detection for PyInstaller
 if hasattr(sys, '_MEIPASS'):
@@ -20,17 +20,20 @@ if hasattr(sys, '_MEIPASS'):
 else:
     EXE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-PATHS_TO_CHECK = [
-    os.path.join(EXE_DIR, TEMPLATE_NAME),
-    os.path.join(EXE_DIR, 'release', TEMPLATE_NAME),
-    os.path.join(os.getcwd(), 'release', TEMPLATE_NAME),
-    os.path.join(os.getcwd(), TEMPLATE_NAME)
-]
-
-TEMPLATE_PATH = TEMPLATE_NAME
-for p in PATHS_TO_CHECK:
-    if os.path.exists(p):
-        TEMPLATE_PATH = p
+TEMPLATE_PATH = TEMPLATE_CANDIDATE_NAMES[0]
+for name in TEMPLATE_CANDIDATE_NAMES:
+    paths_to_check = [
+        os.path.join(EXE_DIR, name),
+        os.path.join(EXE_DIR, 'release', name),
+        os.path.join(os.getcwd(), 'release', name),
+        os.path.join(os.getcwd(), 'public', name),
+        os.path.join(os.getcwd(), name)
+    ]
+    for p in paths_to_check:
+        if os.path.exists(p):
+            TEMPLATE_PATH = p
+            break
+    if os.path.exists(TEMPLATE_PATH):
         break
 
 OUTPUT_DIR = os.path.join(os.path.expanduser("~"), "form137-exports")
@@ -101,7 +104,32 @@ CORS(app, resources={r"/*": {"origins": "*"}}, allow_headers=["Content-Type", "X
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"success": True, "status": "Running", "template": TEMPLATE_PATH})
+    return jsonify({"success": True, "status": "Running", "template": TEMPLATE_PATH, "service": "excel-bridge-python"})
+
+@app.route('/download/installer', methods=['GET'])
+def download_installer():
+    target = os.path.join(os.getcwd(), 'scripts', 'setup-portable-bridge.ps1')
+    if os.path.exists(target):
+        return send_file(target, as_attachment=True, download_name="setup-portable-bridge.ps1", mimetype='application/octet-stream')
+    return jsonify({"success": False, "error": "Installer not found"}), 404
+
+@app.route('/download/exe', methods=['GET'])
+def download_exe():
+    target = os.path.join(os.getcwd(), 'release', 'excel-bridge-server.exe')
+    if os.path.exists(target):
+        return send_file(target, as_attachment=True, download_name="excel-bridge-server.exe", mimetype='application/octet-stream')
+    return jsonify({"success": False, "error": "Executable not found"}), 404
+
+@app.route('/download/template', methods=['GET'])
+def download_template():
+    if os.path.exists(TEMPLATE_PATH):
+        return send_file(
+            TEMPLATE_PATH, 
+            as_attachment=True, 
+            download_name=os.path.basename(TEMPLATE_PATH),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+    return jsonify({"success": False, "error": "Template not found"}), 404
 
 @app.route('/open-excel', methods=['POST'])
 def open_excel():
@@ -291,6 +319,7 @@ def open_excel():
         # If the web client explicitly requests the binary file back automatically
         if return_file:
             # We skip os.startfile and just ship the file out over HTTP
+            log_it(f"Shipping file to client: {filename}")
             return send_file(
                 output_path,
                 as_attachment=True,
@@ -305,4 +334,5 @@ def open_excel():
         log_it(f"ERR: {str(e)}"); return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=PORT, debug=False)
+    log_it(f"Python Bridge Server online on 0.0.0.0:{PORT}")
+    app.run(host='0.0.0.0', port=PORT, debug=False)

@@ -93,6 +93,21 @@ export async function openExcelViaBridge(data, options = {}) {
         };
     }
 }
+export function getBridgeDownloadUrl(type) {
+    const baseUrl = getBridgeBaseUrl();
+    const map = {
+        installer: '/download/installer',
+        exe: '/download/exe',
+        template: '/download/template'
+    };
+    const path = map[type];
+    if (!path) return null;
+
+    const url = new URL(`${baseUrl}${path}`);
+    url.searchParams.set('ngrok-skip-browser-warning', '1');
+    return url.toString();
+}
+
 export async function checkBridgeHealth() {
     const baseUrl = getBridgeBaseUrl();
     const apiKey = (import.meta.env.EXCEL_BRIDGE_KEY || import.meta.env.VITE_EXCEL_BRIDGE_KEY || '').trim();
@@ -111,9 +126,14 @@ export async function checkBridgeHealth() {
         });
 
         clearTimeout(timeoutId);
-        if (!response.ok) return { success: false };
+        if (!response.ok) return { success: false, status: response.status };
         const data = await response.json();
-        return { success: data?.success || false };
+        return {
+            success: data?.success || false,
+            host: data?.host,
+            port: data?.port,
+            service: data?.service
+        };
     } catch (err) {
         return { success: false, error: err.message };
     }
