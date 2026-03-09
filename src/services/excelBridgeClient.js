@@ -1,4 +1,14 @@
-import { saveAs } from 'file-saver';
+// function to handle binary downloads natively to avoid module dependency issues on Vercel
+function downloadBlob(blob, filename) {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.parentNode.removeChild(link);
+    window.URL.revokeObjectURL(url);
+}
 
 function getBridgeBaseUrl() {
     const fromEnv = (import.meta.env.EXCEL_BRIDGE_URL || import.meta.env.VITE_EXCEL_BRIDGE_URL || '').trim();
@@ -63,7 +73,7 @@ export async function openExcelViaBridge(data, options = {}) {
                 }
             }
 
-            saveAs(blob, filename);
+            downloadBlob(blob, filename);
             return {
                 success: true,
                 filePath: filename,
