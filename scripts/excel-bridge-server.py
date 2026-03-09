@@ -337,7 +337,9 @@ def open_excel():
                 mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
             
-        output_path = os.path.join(OUTPUT_DIR, filename); wb.save(output_path)
+        # Desktop / Local mode only
+        output_path = os.path.join(OUTPUT_DIR, filename)
+        wb.save(output_path)
             
         # Desktop behavior: open it locally on the bridge machine
         if sys.platform == 'win32': os.startfile(output_path)
