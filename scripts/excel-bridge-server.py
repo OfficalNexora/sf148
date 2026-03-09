@@ -4,6 +4,7 @@ import json
 import time
 import datetime
 import subprocess
+import io
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import openpyxl
@@ -325,7 +326,6 @@ def open_excel():
         # If the web client explicitly requests the binary file back automatically
         if return_file:
             # Save to BytesIO for memory-safe streaming
-            import io
             file_stream = io.BytesIO()
             wb.save(file_stream)
             file_stream.seek(0)
