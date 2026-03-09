@@ -136,13 +136,19 @@ def open_excel():
     if API_KEY and request.headers.get('x-bridge-key') != API_KEY:
         return jsonify({"success": False, "error": "Unauthorized"}), 401
     try:
-        body = request.get_json(); data = body.get('data', {}); info = data.get('info', {}); eligibility = data.get('eligibility', {}); cert = data.get('certification', {})
+        body = request.get_json(); data = body.get('data', {}); 
+        # Support both 'studentInfo' and 'info'
+        info = data.get('info') or data.get('studentInfo') or {}
+        eligibility = data.get('eligibility', {})
+        cert = data.get('certification', {})
         return_file = body.get('returnFile', False)
-        log_it(f"Exporting: {info.get('lname', 'Unknown')}")
+        
+        log_it(f"Exporting: {info.get('lname', info.get('lastName', 'Unknown'))}")
         if not os.path.exists(TEMPLATE_PATH):
             log_it(f"ERR: Template missing at {TEMPLATE_PATH}")
             return jsonify({"success": False, "error": "Template missing"}), 500
-        wb = openpyxl.load_workbook(TEMPLATE_PATH); sn = [s.upper() for s in wb.sheetnames]
+        # keep_vba=True helps preserve namespaces that openpyxl might otherwise strip
+        wb = openpyxl.load_workbook(TEMPLATE_PATH, keep_vba=True); sn = [s.upper() for s in wb.sheetnames]
         ws_front = wb[wb.sheetnames[sn.index('FRONT')]] if 'FRONT' in sn else wb.active
         ws_back = wb[wb.sheetnames[sn.index('BACK')]] if 'BACK' in sn else (wb[wb.sheetnames[1]] if len(wb.sheetnames)>1 else wb.active)
 
@@ -313,19 +319,25 @@ def open_excel():
         safe_write(ws_back, 'T94', cert.get('certDate', ''))
         safe_write(ws_back, 'J114', cert.get('dateIssued', ''))
         
-        filename = f"SF10_{str(info.get('lname','Student')).replace(' ','_')}_{int(time.time())}.xlsx"
-        output_path = os.path.join(OUTPUT_DIR, filename); wb.save(output_path)
+        lname_val = info.get('lname') or info.get('lastName') or 'Student'
+        filename = f"SF10_{str(lname_val).replace(' ','_')}_{int(time.time())}.xlsx"
         
         # If the web client explicitly requests the binary file back automatically
         if return_file:
-            # We skip os.startfile and just ship the file out over HTTP
-            log_it(f"Shipping file to client: {filename}")
+            # Save to BytesIO for memory-safe streaming
+            import io
+            file_stream = io.BytesIO()
+            wb.save(file_stream)
+            file_stream.seek(0)
+            log_it(f"Shipping file to client: {filename} ({file_stream.getbuffer().nbytes} bytes)")
             return send_file(
-                output_path,
+                file_stream,
                 as_attachment=True,
                 download_name=filename,
                 mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
+            
+        output_path = os.path.join(OUTPUT_DIR, filename); wb.save(output_path)
             
         # Desktop behavior: open it locally on the bridge machine
         if sys.platform == 'win32': os.startfile(output_path)
