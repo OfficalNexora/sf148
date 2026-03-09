@@ -11,7 +11,6 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
 }
 
 $InstallDir = "C:\Form137Bridge"
-$PyScript = "excel-bridge-server.py"
 $ExeName = "excel-bridge-server.exe" 
 $NgrokExe = "ngrok.exe"
 $TemplateName = "Form137_Template.xlsx"

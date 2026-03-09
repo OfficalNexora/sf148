@@ -1,3 +1,5 @@
+import { saveAs } from 'file-saver';
+
 function getBridgeBaseUrl() {
     const fromEnv = (import.meta.env.EXCEL_BRIDGE_URL || import.meta.env.VITE_EXCEL_BRIDGE_URL || '').trim();
     if (fromEnv) return fromEnv.replace(/\/+$/, '');
@@ -49,8 +51,6 @@ export async function openExcelViaBridge(data, options = {}) {
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
             const blob = await response.blob();
-            // We use file-saver to force download on the browser client
-            const { saveAs } = await import('file-saver');
 
             // Extract filename from header if available
             const disposition = response.headers.get('content-disposition');
