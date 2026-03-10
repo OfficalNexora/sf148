@@ -148,8 +148,7 @@ def open_excel():
         if not os.path.exists(TEMPLATE_PATH):
             log_it(f"ERR: Template missing at {TEMPLATE_PATH}")
             return jsonify({"success": False, "error": "Template missing"}), 500
-        # keep_vba=True helps preserve namespaces that openpyxl might otherwise strip
-        wb = openpyxl.load_workbook(TEMPLATE_PATH, keep_vba=True); sn = [s.upper() for s in wb.sheetnames]
+        wb = openpyxl.load_workbook(TEMPLATE_PATH); sn = [s.upper() for s in wb.sheetnames]
         ws_front = wb[wb.sheetnames[sn.index('FRONT')]] if 'FRONT' in sn else wb.active
         ws_back = wb[wb.sheetnames[sn.index('BACK')]] if 'BACK' in sn else (wb[wb.sheetnames[1]] if len(wb.sheetnames)>1 else wb.active)
 
@@ -323,23 +322,18 @@ def open_excel():
         lname_val = info.get('lname') or info.get('lastName') or 'Student'
         filename = f"SF10_{str(lname_val).replace(' ','_')}_{int(time.time())}.xlsx"
         
+        output_path = os.path.join(OUTPUT_DIR, filename)
+        wb.save(output_path)
+        
         # If the web client explicitly requests the binary file back automatically
         if return_file:
-            # Save to BytesIO for memory-safe streaming
-            file_stream = io.BytesIO()
-            wb.save(file_stream)
-            file_stream.seek(0)
-            log_it(f"Shipping file to client: {filename} ({file_stream.getbuffer().nbytes} bytes)")
+            log_it(f"Shipping file to client: {filename} from disk")
             return send_file(
-                file_stream,
+                output_path,
                 as_attachment=True,
                 download_name=filename,
                 mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
-            
-        # Desktop / Local mode only
-        output_path = os.path.join(OUTPUT_DIR, filename)
-        wb.save(output_path)
             
         # Desktop behavior: open it locally on the bridge machine
         if sys.platform == 'win32': os.startfile(output_path)
